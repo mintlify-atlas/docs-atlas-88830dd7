@@ -1,0 +1,234 @@
+---
+title: "VerticalOCRModule"
+description: "Class-based API for vertical text recognition tasks"
+icon: "text-slash"
+---
+
+## Overview
+
+`VerticalOCRModule` provides a class-based interface for Vertical Optical Character Recognition (OCR) tasks. It specializes in recognizing text that flows vertically, commonly found in Asian languages and vertical writing systems.
+
+This module is the imperative counterpart to the [`useVerticalOCR`](/api/hooks/use-vertical-ocr) hook.
+
+## When to use modules vs hooks
+
+**Use VerticalOCRModule when:**
+- You need fine-grained control over model lifecycle
+- Working outside React components
+- Managing multiple model instances
+- Implementing custom resource management
+
+**Use useVerticalOCR hook when:**
+- Working within React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+
+## Import
+
+```typescript
+import { VerticalOCRModule } from 'react-native-executorch';
+```
+
+## Constructor
+
+### VerticalOCRModule()
+
+Creates a new instance of the Vertical OCR module.
+
+```typescript
+const verticalOcr = new VerticalOCRModule();
+```
+
+## Methods
+
+### load()
+
+Loads the vertical OCR model with detector, recognizer, and language configuration.
+
+<ParamField path="model" type="object" required>
+  Model configuration object
+  
+  <ParamField path="model.detectorSource" type="ResourceSource" required>
+    Location of the text detection model binary
+  </ParamField>
+  
+  <ParamField path="model.recognizerSource" type="ResourceSource" required>
+    Location of the text recognition model binary
+  </ParamField>
+  
+  <ParamField path="model.language" type="OCRLanguage" required>
+    Language of the text to be recognized (e.g., `'zh'`, `'ja'`, `'ko'`)
+  </ParamField>
+</ParamField>
+
+<ParamField path="independentCharacters" type="boolean" required>
+  Whether to treat characters independently during recognition. Set to `true` for languages where characters don't form connected words.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" default="() => {}">
+  Optional callback to monitor download progress (0 to 1)
+</ParamField>
+
+```typescript
+import { VerticalOCRModule } from 'react-native-executorch';
+import { VERTICAL_OCR_CHINESE } from 'react-native-executorch';
+
+const verticalOcr = new VerticalOCRModule();
+
+await verticalOcr.load(
+  VERTICAL_OCR_CHINESE,
+  true, // Treat characters independently
+  (progress) => {
+    console.log(`Download progress: ${(progress * 100).toFixed(0)}%`);
+  }
+);
+```
+
+### forward()
+
+Executes vertical text recognition on an image.
+
+<ParamField path="imageSource" type="string" required>
+  Image source as either:
+  - A fetchable resource URL
+  - A Base64-encoded image string
+</ParamField>
+
+**Returns:** `Promise<OCRDetection[]>`
+
+```typescript
+const detections = await verticalOcr.forward('path/to/vertical-text-image.jpg');
+
+detections.forEach((detection) => {
+  console.log('Text:', detection.text);
+  console.log('Confidence:', detection.confidence);
+  console.log('Bounding polygon:', detection.polygon);
+});
+```
+
+### delete()
+
+Releases the memory held by the module. After calling this method, the module cannot be used for inference.
+
+<Warning>
+  You cannot delete the module while it's processing an image. Ensure all `forward()` calls have completed before calling `delete()`.
+</Warning>
+
+```typescript
+verticalOcr.delete();
+```
+
+## Complete example
+
+```typescript
+import { VerticalOCRModule } from 'react-native-executorch';
+import { VERTICAL_OCR_CHINESE } from 'react-native-executorch';
+
+async function recognizeVerticalText(imagePath: string) {
+  const verticalOcr = new VerticalOCRModule();
+  
+  try {
+    // Load model
+    console.log('Loading vertical OCR model...');
+    await verticalOcr.load(
+      VERTICAL_OCR_CHINESE,
+      true, // Independent characters for Chinese
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('Model loaded successfully');
+    
+    // Perform OCR
+    const detections = await verticalOcr.forward(imagePath);
+    
+    // Process results
+    console.log(`Found ${detections.length} text regions`);
+    detections.forEach((detection, index) => {
+      console.log(`\nRegion ${index + 1}:`);
+      console.log(`  Text: ${detection.text}`);
+      console.log(`  Confidence: ${(detection.confidence * 100).toFixed(1)}%`);
+      console.log(`  Polygon points: ${detection.polygon.length}`);
+    });
+    
+    return detections;
+  } catch (error) {
+    console.error('Vertical OCR failed:', error);
+    throw error;
+  } finally {
+    // Clean up
+    verticalOcr.delete();
+  }
+}
+
+// Usage
+recognizeVerticalText('path/to/vertical-chinese-text.jpg');
+```
+
+## Language support
+
+Vertical OCR supports the same languages as the standard OCR module:
+
+- **Chinese**: `zh`
+- **Japanese**: `ja`
+- **Korean**: `ko`
+- And other languages with vertical writing systems
+
+## Independent characters mode
+
+The `independentCharacters` parameter is important for vertical text recognition:
+
+- **`true`**: Characters are recognized independently (recommended for Chinese, Japanese, Korean)
+- **`false`**: Characters may be grouped into words (for languages with word boundaries)
+
+```typescript
+// For Chinese/Japanese/Korean vertical text
+await verticalOcr.load(model, true, onProgress);
+
+// For vertical text with word boundaries
+await verticalOcr.load(model, false, onProgress);
+```
+
+## Performance tips
+
+1. **Reuse instances**: Create one instance and reuse it for multiple images
+2. **Image preprocessing**: Ensure images are properly oriented for vertical text
+3. **Memory management**: Call `delete()` when done to free resources
+4. **Batch processing**: Process multiple images sequentially with the same instance
+
+```typescript
+const verticalOcr = new VerticalOCRModule();
+await verticalOcr.load(VERTICAL_OCR_CHINESE, true);
+
+// Process multiple images
+for (const imagePath of imagePaths) {
+  const result = await verticalOcr.forward(imagePath);
+  processResult(result);
+}
+
+// Clean up once
+verticalOcr.delete();
+```
+
+## Error handling
+
+```typescript
+try {
+  await verticalOcr.load(model, independentCharacters);
+  const result = await verticalOcr.forward(imagePath);
+} catch (error) {
+  if (error.code === 'MODEL_LOAD_FAILED') {
+    console.error('Failed to load vertical OCR model');
+  } else if (error.code === 'FORWARD_FAILED') {
+    console.error('Failed to process image');
+  }
+  throw error;
+}
+```
+
+## See also
+
+- [useVerticalOCR hook](/api/hooks/use-vertical-ocr) - React hook equivalent
+- [OCRModule](/api/modules/ocr-module) - Horizontal text recognition
+- [OCR Types](/api/types/computer-vision-types#ocr-types) - Type definitions
+- [Vertical OCR guide](/computer-vision/ocr#vertical-text) - Usage guide

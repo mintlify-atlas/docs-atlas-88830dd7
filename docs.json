@@ -164,6 +164,7 @@
               "api/modules/object-detection-module",
               "api/modules/semantic-segmentation-module",
               "api/modules/ocr-module",
+              "api/modules/vertical-ocr-module",
               "api/modules/style-transfer-module",
               "api/modules/image-embeddings-module",
               "api/modules/text-to-image-module",

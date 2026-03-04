@@ -325,8 +325,7 @@ class VoiceTranscriber {
   }
 
   private async loadAudioFile(path: string): Promise<Float32Array> {
-    // Implementation depends on your audio library
-    // This is a placeholder
+    // Implementation depends on your audio library (e.g., expo-av, react-native-sound)
     const audioData = await AudioRecorder.loadFile(path);
     return new Float32Array(audioData);
   }

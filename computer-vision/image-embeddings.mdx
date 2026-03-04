@@ -561,10 +561,9 @@ For large-scale applications, reduce embedding dimensions:
 
 ```tsx
 // Using PCA or similar technique
-const reduceDimensions = (embedding: Float32Array, targetDim: number) => {
-  // Apply dimensionality reduction
-  // Return reduced embedding
-  // This is a placeholder - implement using ML library
+const reduceDimensions = (embedding: Float32Array, targetDim: number): Float32Array => {
+  // Example: Simple truncation (use PCA or UMAP for better results)
+  return embedding.slice(0, targetDim);
 };
 ```
 
