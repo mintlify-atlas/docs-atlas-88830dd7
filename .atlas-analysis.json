@@ -1,0 +1,236 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "React Native ExecuTorch",
+  "projectDescription": "Declarative way to run AI models in React Native on device, powered by ExecuTorch",
+  "theme": "aspen",
+  "primaryColor": "#081875",
+  "lightColor": "#7a8eb5",
+  "darkColor": "#e5e8ee",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/architecture",
+              "core-concepts/resource-fetching",
+              "core-concepts/model-loading",
+              "core-concepts/error-handling"
+            ]
+          },
+          {
+            "group": "Large Language Models",
+            "pages": [
+              "llm/overview",
+              "llm/usellm-hook",
+              "llm/chat-configuration",
+              "llm/tool-calling",
+              "llm/context-strategies",
+              "llm/available-models"
+            ]
+          },
+          {
+            "group": "Computer Vision",
+            "pages": [
+              "computer-vision/overview",
+              "computer-vision/classification",
+              "computer-vision/object-detection",
+              "computer-vision/semantic-segmentation",
+              "computer-vision/ocr",
+              "computer-vision/style-transfer",
+              "computer-vision/image-embeddings",
+              "computer-vision/text-to-image"
+            ]
+          },
+          {
+            "group": "Speech & Audio",
+            "pages": [
+              "speech/overview",
+              "speech/speech-to-text",
+              "speech/text-to-speech",
+              "speech/voice-activity-detection"
+            ]
+          },
+          {
+            "group": "Text Embeddings",
+            "pages": [
+              "text-embeddings/overview",
+              "text-embeddings/usage",
+              "text-embeddings/semantic-search"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/custom-models",
+              "advanced/performance-optimization",
+              "advanced/memory-management",
+              "advanced/debugging"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/expo-setup",
+              "guides/bare-react-native-setup",
+              "guides/migrating-models",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Initialization",
+            "pages": [
+              "api/init-executorch"
+            ]
+          },
+          {
+            "group": "LLM Hooks",
+            "pages": [
+              "api/hooks/use-llm",
+              "api/hooks/use-tokenizer"
+            ]
+          },
+          {
+            "group": "Computer Vision Hooks",
+            "pages": [
+              "api/hooks/use-classification",
+              "api/hooks/use-object-detection",
+              "api/hooks/use-semantic-segmentation",
+              "api/hooks/use-ocr",
+              "api/hooks/use-vertical-ocr",
+              "api/hooks/use-style-transfer",
+              "api/hooks/use-image-embeddings",
+              "api/hooks/use-text-to-image"
+            ]
+          },
+          {
+            "group": "Speech Hooks",
+            "pages": [
+              "api/hooks/use-speech-to-text",
+              "api/hooks/use-text-to-speech",
+              "api/hooks/use-vad"
+            ]
+          },
+          {
+            "group": "Text Embeddings Hooks",
+            "pages": [
+              "api/hooks/use-text-embeddings"
+            ]
+          },
+          {
+            "group": "General Hooks",
+            "pages": [
+              "api/hooks/use-executorch-module"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "api/modules/llm-module",
+              "api/modules/classification-module",
+              "api/modules/object-detection-module",
+              "api/modules/semantic-segmentation-module",
+              "api/modules/ocr-module",
+              "api/modules/style-transfer-module",
+              "api/modules/image-embeddings-module",
+              "api/modules/text-to-image-module",
+              "api/modules/speech-to-text-module",
+              "api/modules/text-to-speech-module",
+              "api/modules/text-embeddings-module",
+              "api/modules/vad-module",
+              "api/modules/tokenizer-module",
+              "api/modules/executorch-module"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/llm-types",
+              "api/types/computer-vision-types",
+              "api/types/speech-types",
+              "api/types/common-types"
+            ]
+          },
+          {
+            "group": "Constants",
+            "pages": [
+              "api/constants/model-urls",
+              "api/constants/llm-defaults",
+              "api/constants/vision-constants"
+            ]
+          },
+          {
+            "group": "Errors",
+            "pages": [
+              "api/errors/error-handling",
+              "api/errors/error-codes"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "On-device LLM execution with Llama and Qwen models",
+    "Computer vision tasks (classification, object detection, segmentation, OCR)",
+    "Speech processing (speech-to-text, text-to-speech, voice activity detection)",
+    "Text and image embeddings for semantic search",
+    "Tool calling and function execution for LLMs",
+    "Declarative React hooks API for all AI capabilities",
+    "Support for both Expo and bare React Native projects",
+    "Optimized model loading with progress tracking"
+  ],
+  "publicApiSurface": [
+    "initExecutorch",
+    "useLLM",
+    "useClassification",
+    "useObjectDetection",
+    "useSemanticSegmentation",
+    "useOCR",
+    "useVerticalOCR",
+    "useStyleTransfer",
+    "useImageEmbeddings",
+    "useTextToImage",
+    "useSpeechToText",
+    "useTextToSpeech",
+    "useVAD",
+    "useTextEmbeddings",
+    "useTokenizer",
+    "useExecutorchModule",
+    "LLMModule",
+    "ClassificationModule",
+    "ObjectDetectionModule",
+    "SemanticSegmentationModule",
+    "OCRModule",
+    "StyleTransferModule",
+    "ImageEmbeddingsModule",
+    "TextToImageModule",
+    "SpeechToTextModule",
+    "TextToSpeechModule",
+    "TextEmbeddingsModule",
+    "VADModule",
+    "TokenizerModule",
+    "ExecutorchModule",
+    "LLAMA3_2_1B",
+    "LLAMA3_2_3B",
+    "QWEN3_0_6B",
+    "QWEN3_1_7B",
+    "RnExecutorchError",
+    "RnExecutorchErrorCode"
+  ]
+}
