@@ -1,0 +1,466 @@
+---
+title: 'useExecutorchModule'
+description: 'React hook for loading and running arbitrary ExecuTorch models'
+icon: 'cube'
+---
+
+## Overview
+
+The `useExecutorchModule` hook manages a general ExecuTorch module instance for loading and executing custom or arbitrary ExecuTorch models. This is a low-level hook that provides direct access to model execution.
+
+## Import
+
+```typescript
+import { useExecutorchModule } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const module = useExecutorchModule({
+  modelSource,
+  preventLoad
+}: ExecutorchModuleProps): ExecutorchModuleType
+```
+
+## Parameters
+
+<ParamField path="modelSource" type="ResourceSource" required>
+  Source location of the ExecuTorch model binary file (.pte)
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading when the hook mounts
+</ParamField>
+
+## Return Value
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the ExecuTorch model is loaded and ready for inference.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing a forward pass.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Executes the model's forward pass with provided input tensors.
+  
+  ```typescript
+  forward(inputTensor: TensorPtr[]): Promise<TensorPtr[]>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="inputTensor" type="TensorPtr[]" required>
+      Array of input tensor pointers
+    </ParamField>
+  </Expandable>
+  
+  Returns promise resolving to array of output tensor pointers.
+</ResponseField>
+
+## Types
+
+### TensorPtr
+
+```typescript
+interface TensorPtr {
+  dataPtr: TensorBuffer;   // Data buffer (typed array)
+  sizes: number[];          // Tensor dimensions
+  scalarType: ScalarType;   // Data type
+}
+```
+
+### TensorBuffer
+
+```typescript
+type TensorBuffer =
+  | ArrayBuffer
+  | Float32Array
+  | Float64Array
+  | Int8Array
+  | Int16Array
+  | Int32Array
+  | Uint8Array
+  | Uint16Array
+  | Uint32Array
+  | BigInt64Array
+  | BigUint64Array;
+```
+
+### ScalarType
+
+```typescript
+enum ScalarType {
+  BYTE = 0,
+  CHAR = 1,
+  SHORT = 2,
+  INT = 3,
+  LONG = 4,
+  HALF = 5,
+  FLOAT = 6,
+  DOUBLE = 7,
+  BOOL = 11,
+  // ... more types
+}
+```
+
+## Usage Examples
+
+### Basic Custom Model
+
+```typescript
+import { useExecutorchModule, ScalarType } from 'react-native-executorch';
+import { useState } from 'react';
+
+function CustomModelDemo() {
+  const [output, setOutput] = useState<any>(null);
+  
+  const module = useExecutorchModule({
+    modelSource: 'https://example.com/custom-model.pte',
+  });
+  
+  const runInference = async () => {
+    if (!module.isReady) return;
+    
+    try {
+      // Create input tensor
+      const inputData = new Float32Array([1.0, 2.0, 3.0, 4.0]);
+      const inputTensor = {
+        dataPtr: inputData,
+        sizes: [1, 4], // Batch size 1, 4 features
+        scalarType: ScalarType.FLOAT,
+      };
+      
+      // Run forward pass
+      const outputTensors = await module.forward([inputTensor]);
+      
+      // Extract output
+      const outputData = outputTensors[0].dataPtr;
+      setOutput(Array.from(outputData as Float32Array));
+      
+      console.log('Output:', outputData);
+    } catch (error) {
+      console.error('Inference failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {module.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <Button
+        title="Run Inference"
+        onPress={runInference}
+        disabled={!module.isReady}
+      />
+      
+      {output && (
+        <Text>Output: [{output.join(', ')}]</Text>
+      )}
+    </View>
+  );
+}
+```
+
+### Matrix Multiplication Model
+
+```typescript
+import { useExecutorchModule, ScalarType } from 'react-native-executorch';
+import { useState } from 'react';
+
+function MatrixMultiplier() {
+  const [result, setResult] = useState<number[][] | null>(null);
+  
+  const module = useExecutorchModule({
+    modelSource: require('./models/matmul.pte'),
+  });
+  
+  const multiplyMatrices = async (
+    matrixA: number[][],
+    matrixB: number[][]
+  ) => {
+    if (!module.isReady) return;
+    
+    try {
+      // Flatten matrices to Float32Arrays
+      const flatA = new Float32Array(matrixA.flat());
+      const flatB = new Float32Array(matrixB.flat());
+      
+      const tensorA = {
+        dataPtr: flatA,
+        sizes: [matrixA.length, matrixA[0].length],
+        scalarType: ScalarType.FLOAT,
+      };
+      
+      const tensorB = {
+        dataPtr: flatB,
+        sizes: [matrixB.length, matrixB[0].length],
+        scalarType: ScalarType.FLOAT,
+      };
+      
+      const outputs = await module.forward([tensorA, tensorB]);
+      const outputData = outputs[0].dataPtr as Float32Array;
+      const [rows, cols] = outputs[0].sizes;
+      
+      // Reshape to 2D array
+      const resultMatrix: number[][] = [];
+      for (let i = 0; i < rows; i++) {
+        resultMatrix[i] = [];
+        for (let j = 0; j < cols; j++) {
+          resultMatrix[i][j] = outputData[i * cols + j];
+        }
+      }
+      
+      setResult(resultMatrix);
+    } catch (error) {
+      console.error('Matrix multiplication failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Button
+        title="Multiply [2x3] × [3x2]"
+        onPress={() =>
+          multiplyMatrices(
+            [[1, 2, 3], [4, 5, 6]],
+            [[7, 8], [9, 10], [11, 12]]
+          )
+        }
+      />
+      
+      {result && (
+        <View>
+          <Text>Result:</Text>
+          {result.map((row, i) => (
+            <Text key={i}>[{row.join(', ')}]</Text>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Image Processing Model
+
+```typescript
+import { useExecutorchModule, ScalarType } from 'react-native-executorch';
+import { useState } from 'react';
+
+function CustomImageProcessor() {
+  const [processedImage, setProcessedImage] = useState<Uint8Array | null>(null);
+  
+  const module = useExecutorchModule({
+    modelSource: 'https://example.com/image-processor.pte',
+  });
+  
+  const processImage = async (imageData: Uint8Array, width: number, height: number) => {
+    if (!module.isReady) return;
+    
+    try {
+      const inputTensor = {
+        dataPtr: imageData,
+        sizes: [height, width, 3], // HWC format
+        scalarType: ScalarType.BYTE,
+      };
+      
+      const outputs = await module.forward([inputTensor]);
+      const processedData = outputs[0].dataPtr as Uint8Array;
+      
+      setProcessedImage(processedData);
+      console.log('Image processed successfully');
+    } catch (error) {
+      console.error('Image processing failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Button
+        title="Process Image"
+        onPress={() => {
+          // Load and process image
+          const dummyImage = new Uint8Array(300 * 300 * 3);
+          processImage(dummyImage, 300, 300);
+        }}
+        disabled={!module.isReady}
+      />
+    </View>
+  );
+}
+```
+
+### Batch Processing
+
+```typescript
+import { useExecutorchModule, ScalarType } from 'react-native-executorch';
+import { useState } from 'react';
+
+function BatchProcessor() {
+  const [batchResults, setBatchResults] = useState<number[][]>([]);
+  
+  const module = useExecutorchModule({
+    modelSource: require('./models/batch-model.pte'),
+  });
+  
+  const processBatch = async (inputs: number[][]) => {
+    if (!module.isReady) return;
+    
+    try {
+      // Stack inputs into batch tensor
+      const batchSize = inputs.length;
+      const featureSize = inputs[0].length;
+      const flatData = new Float32Array(inputs.flat());
+      
+      const batchTensor = {
+        dataPtr: flatData,
+        sizes: [batchSize, featureSize],
+        scalarType: ScalarType.FLOAT,
+      };
+      
+      const outputs = await module.forward([batchTensor]);
+      const outputData = outputs[0].dataPtr as Float32Array;
+      const outputSize = outputs[0].sizes[1];
+      
+      // Unstack results
+      const results: number[][] = [];
+      for (let i = 0; i < batchSize; i++) {
+        results[i] = Array.from(
+          outputData.slice(i * outputSize, (i + 1) * outputSize)
+        );
+      }
+      
+      setBatchResults(results);
+    } catch (error) {
+      console.error('Batch processing failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Button
+        title="Process Batch"
+        onPress={() =>
+          processBatch([
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+          ])
+        }
+      />
+      
+      {batchResults.map((result, idx) => (
+        <Text key={idx}>
+          Result {idx + 1}: [{result.join(', ')}]
+        </Text>
+      ))}
+    </View>
+  );
+}
+```
+
+### Model with Multiple Outputs
+
+```typescript
+import { useExecutorchModule, ScalarType } from 'react-native-executorch';
+import { useState } from 'react';
+
+function MultiOutputModel() {
+  const [outputs, setOutputs] = useState<any[]>([]);
+  
+  const module = useExecutorchModule({
+    modelSource: 'https://example.com/multi-output.pte',
+  });
+  
+  const runModel = async (input: Float32Array) => {
+    if (!module.isReady) return;
+    
+    try {
+      const inputTensor = {
+        dataPtr: input,
+        sizes: [1, input.length],
+        scalarType: ScalarType.FLOAT,
+      };
+      
+      const outputTensors = await module.forward([inputTensor]);
+      
+      // Model returns multiple outputs
+      const processedOutputs = outputTensors.map((tensor, idx) => ({
+        index: idx,
+        shape: tensor.sizes,
+        data: Array.from(tensor.dataPtr as Float32Array).slice(0, 5), // First 5 values
+      }));
+      
+      setOutputs(processedOutputs);
+    } catch (error) {
+      console.error('Inference failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Button
+        title="Run Model"
+        onPress={() => runModel(new Float32Array([1, 2, 3, 4, 5]))}
+      />
+      
+      {outputs.map((output) => (
+        <View key={output.index}>
+          <Text>Output {output.index}:</Text>
+          <Text>  Shape: [{output.shape.join(', ')}]</Text>
+          <Text>  Data: [{output.data.join(', ')}...]</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+```
+
+## Notes
+
+<Info>
+  This is a low-level hook for advanced use cases. For common tasks, use specialized hooks like `useLLM`, `useClassification`, etc.
+</Info>
+
+<Warning>
+  You must manually construct input tensors with correct shapes and data types matching your model's expectations.
+</Warning>
+
+<Tip>
+  Use this hook when you have a custom ExecuTorch model not covered by the specialized hooks, or when you need full control over tensor operations.
+</Tip>
+
+## When to Use
+
+Use `useExecutorchModule` when:
+- You have a custom-trained ExecuTorch model
+- Your model doesn't fit into standard categories
+- You need direct tensor-level control
+- You're experimenting with new model architectures
+
+## Common Patterns
+
+1. **Custom Preprocessing**: Transform data before feeding to model
+2. **Custom Postprocessing**: Parse model outputs into app-specific format
+3. **Multi-stage Pipelines**: Chain multiple models together
+4. **Tensor Manipulation**: Reshape, slice, or combine tensors
+
+## See Also
+
+- [Model Export Guide](/guides/exporting-models) - How to export custom models
+- [Tensor Operations](/guides/tensor-operations) - Working with tensors
+- [Custom Models](/guides/custom-models) - Building custom model pipelines

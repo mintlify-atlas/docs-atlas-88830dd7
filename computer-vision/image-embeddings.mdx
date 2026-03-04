@@ -1,0 +1,594 @@
+---
+title: Image Embeddings
+description: Generate feature vectors for similarity search and clustering
+---
+
+Image embeddings convert images into dense numerical vectors (embeddings) that capture semantic visual features. These embeddings enable powerful applications like image similarity search, clustering, and recommendation systems.
+
+## Quick Start
+
+```tsx
+import { useImageEmbeddings, CLIP_VIT_BASE_PATCH32_IMAGE } from 'react-native-executorch';
+
+function ImageSearch() {
+  const { isReady, forward } = useImageEmbeddings({
+    model: CLIP_VIT_BASE_PATCH32_IMAGE,
+  });
+
+  const getEmbedding = async (imageUri: string) => {
+    const embedding = await forward(imageUri);
+    // Float32Array of length 512 (model-dependent)
+  };
+
+  return <Button title="Get Embedding" onPress={() => getEmbedding(imageUri)} />;
+}
+```
+
+## Hook API
+
+### `useImageEmbeddings(props)`
+
+Manages an image embeddings model instance.
+
+#### Parameters
+
+<ParamField path="model" type="object" required>
+  Model configuration object
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source of the embeddings model binary
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Error object if loading or inference fails
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Whether the model is loaded and ready
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Whether the model is currently processing
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress (0-1)
+</ResponseField>
+
+<ResponseField name="forward" type="(imageSource: string) => Promise<Float32Array>">
+  Generate embedding for an image. Returns a Float32Array feature vector.
+</ResponseField>
+
+## Available Models
+
+### CLIP_VIT_BASE_PATCH32_IMAGE
+
+CLIP (Contrastive Language-Image Pre-training) vision encoder.
+
+```tsx
+import { CLIP_VIT_BASE_PATCH32_IMAGE } from 'react-native-executorch';
+
+const embedder = useImageEmbeddings({
+  model: CLIP_VIT_BASE_PATCH32_IMAGE,
+});
+```
+
+**Specifications:**
+- **Architecture**: Vision Transformer (ViT-B/32)
+- **Embedding Size**: 512 dimensions
+- **Pre-training**: CLIP dataset (400M image-text pairs)
+- **Inference Time**: ~100-150ms
+- **Use Cases**: Cross-modal search, zero-shot classification, similarity
+
+## Embedding Operations
+
+### Cosine Similarity
+
+Compare embeddings to measure similarity:
+
+```tsx
+const cosineSimilarity = (
+  embedding1: Float32Array,
+  embedding2: Float32Array
+): number => {
+  let dotProduct = 0;
+  let norm1 = 0;
+  let norm2 = 0;
+  
+  for (let i = 0; i < embedding1.length; i++) {
+    dotProduct += embedding1[i] * embedding2[i];
+    norm1 += embedding1[i] * embedding1[i];
+    norm2 += embedding2[i] * embedding2[i];
+  }
+  
+  return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+};
+
+// Usage
+const similarity = cosineSimilarity(embedding1, embedding2);
+// Returns value between -1 and 1 (higher = more similar)
+```
+
+### Euclidean Distance
+
+Measure distance between embeddings:
+
+```tsx
+const euclideanDistance = (
+  embedding1: Float32Array,
+  embedding2: Float32Array
+): number => {
+  let sum = 0;
+  
+  for (let i = 0; i < embedding1.length; i++) {
+    const diff = embedding1[i] - embedding2[i];
+    sum += diff * diff;
+  }
+  
+  return Math.sqrt(sum);
+};
+
+// Usage
+const distance = euclideanDistance(embedding1, embedding2);
+// Returns non-negative value (lower = more similar)
+```
+
+## Complete Example
+
+```tsx
+import React, { useState } from 'react';
+import { View, Image, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { useImageEmbeddings, CLIP_VIT_BASE_PATCH32_IMAGE } from 'react-native-executorch';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+interface ImageWithEmbedding {
+  uri: string;
+  embedding: Float32Array;
+}
+
+function ImageSimilaritySearch() {
+  const [images, setImages] = useState<ImageWithEmbedding[]>([]);
+  const [selectedImage, setSelectedImage] = useState<ImageWithEmbedding | null>(null);
+  const [similarImages, setSimilarImages] = useState<Array<{ image: ImageWithEmbedding; similarity: number }>>([]);
+
+  const { isReady, isGenerating, error, forward } = useImageEmbeddings({
+    model: CLIP_VIT_BASE_PATCH32_IMAGE,
+  });
+
+  const addImage = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    
+    if (result.assets && result.assets[0].uri) {
+      const uri = result.assets[0].uri;
+      
+      try {
+        const embedding = await forward(uri);
+        setImages(prev => [...prev, { uri, embedding }]);
+      } catch (err) {
+        console.error('Failed to generate embedding:', err);
+      }
+    }
+  };
+
+  const findSimilar = (target: ImageWithEmbedding) => {
+    setSelectedImage(target);
+    
+    const similarities = images
+      .filter(img => img.uri !== target.uri)
+      .map(img => ({
+        image: img,
+        similarity: cosineSimilarity(target.embedding, img.embedding),
+      }))
+      .sort((a, b) => b.similarity - a.similarity);
+    
+    setSimilarImages(similarities);
+  };
+
+  const cosineSimilarity = (a: Float32Array, b: Float32Array): number => {
+    let dot = 0, normA = 0, normB = 0;
+    for (let i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  };
+
+  if (error) return <Text>Error: {error.message}</Text>;
+  if (!isReady) return <Text>Loading model...</Text>;
+
+  return (
+    <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={addImage}
+        disabled={isGenerating}
+      >
+        <Text style={styles.buttonText}>
+          {isGenerating ? 'Processing...' : 'Add Image'}
+        </Text>
+      </TouchableOpacity>
+
+      <Text style={styles.title}>Image Library ({images.length})</Text>
+      <FlatList
+        data={images}
+        horizontal
+        keyExtractor={(item, index) => index.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => findSimilar(item)}>
+            <Image source={{ uri: item.uri }} style={styles.thumbnail} />
+          </TouchableOpacity>
+        )}
+      />
+
+      {selectedImage && (
+        <View style={styles.results}>
+          <Text style={styles.title}>Selected Image:</Text>
+          <Image source={{ uri: selectedImage.uri }} style={styles.selectedImage} />
+          
+          <Text style={styles.title}>Similar Images:</Text>
+          <FlatList
+            data={similarImages}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.similarItem}>
+                <Image source={{ uri: item.image.uri }} style={styles.thumbnail} />
+                <Text style={styles.similarity}>
+                  {(item.similarity * 100).toFixed(1)}% similar
+                </Text>
+              </View>
+            )}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20 },
+  button: { backgroundColor: '#007AFF', padding: 15, borderRadius: 8, marginBottom: 20 },
+  buttonText: { color: 'white', fontSize: 16, textAlign: 'center' },
+  title: { fontSize: 18, fontWeight: 'bold', marginVertical: 10 },
+  thumbnail: { width: 80, height: 80, borderRadius: 8, marginRight: 10 },
+  selectedImage: { width: 200, height: 200, borderRadius: 8, alignSelf: 'center' },
+  results: { marginTop: 20 },
+  similarItem: { flexDirection: 'row', alignItems: 'center', marginVertical: 10 },
+  similarity: { fontSize: 16, marginLeft: 10 },
+});
+
+export default ImageSimilaritySearch;
+```
+
+## Use Cases
+
+### Image Search Engine
+
+Find visually similar images:
+
+```tsx
+interface ImageDatabase {
+  id: string;
+  uri: string;
+  embedding: Float32Array;
+}
+
+class ImageSearchEngine {
+  private database: ImageDatabase[] = [];
+  private embedder: ReturnType<typeof useImageEmbeddings>;
+  
+  constructor(embedder: ReturnType<typeof useImageEmbeddings>) {
+    this.embedder = embedder;
+  }
+  
+  async addImage(uri: string, id: string) {
+    const embedding = await this.embedder.forward(uri);
+    this.database.push({ id, uri, embedding });
+  }
+  
+  async search(queryUri: string, topK: number = 10) {
+    const queryEmbedding = await this.embedder.forward(queryUri);
+    
+    const results = this.database
+      .map(item => ({
+        ...item,
+        similarity: this.cosineSimilarity(queryEmbedding, item.embedding),
+      }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, topK);
+    
+    return results;
+  }
+  
+  private cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    // ... implementation
+  }
+}
+```
+
+### Image Deduplication
+
+Detect duplicate or near-duplicate images:
+
+```tsx
+const findDuplicates = async (
+  imageUris: string[],
+  threshold: number = 0.95
+) => {
+  const embeddings = await Promise.all(
+    imageUris.map(uri => forward(uri))
+  );
+  
+  const duplicates: Array<[number, number, number]> = [];
+  
+  for (let i = 0; i < embeddings.length; i++) {
+    for (let j = i + 1; j < embeddings.length; j++) {
+      const similarity = cosineSimilarity(embeddings[i], embeddings[j]);
+      
+      if (similarity >= threshold) {
+        duplicates.push([i, j, similarity]);
+      }
+    }
+  }
+  
+  return duplicates.map(([i, j, sim]) => ({
+    image1: imageUris[i],
+    image2: imageUris[j],
+    similarity: sim,
+  }));
+};
+```
+
+### Image Clustering
+
+Group similar images together:
+
+```tsx
+const clusterImages = async (
+  imageUris: string[],
+  numClusters: number = 5
+) => {
+  // Get embeddings
+  const embeddings = await Promise.all(
+    imageUris.map(uri => forward(uri))
+  );
+  
+  // Simple k-means clustering
+  const clusters = kMeansClustering(embeddings, numClusters);
+  
+  // Group images by cluster
+  const grouped: Record<number, string[]> = {};
+  clusters.forEach((clusterIdx, imageIdx) => {
+    if (!grouped[clusterIdx]) grouped[clusterIdx] = [];
+    grouped[clusterIdx].push(imageUris[imageIdx]);
+  });
+  
+  return grouped;
+};
+
+// Simplified k-means implementation
+function kMeansClustering(
+  embeddings: Float32Array[],
+  k: number
+): number[] {
+  // Initialize centroids randomly
+  // Assign points to nearest centroid
+  // Update centroids
+  // Repeat until convergence
+  // Return cluster assignments
+  // ... implementation details
+}
+```
+
+### Visual Recommendation System
+
+Recommend similar products or content:
+
+```tsx
+const recommendSimilarProducts = async (
+  currentProductUri: string,
+  productCatalog: Array<{ id: string; imageUri: string; embedding: Float32Array }>,
+  topN: number = 5
+) => {
+  const currentEmbedding = await forward(currentProductUri);
+  
+  const recommendations = productCatalog
+    .map(product => ({
+      ...product,
+      similarity: cosineSimilarity(currentEmbedding, product.embedding),
+    }))
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, topN);
+  
+  return recommendations;
+};
+```
+
+### Cross-Modal Search
+
+With CLIP embeddings, search images using text (requires text encoder):
+
+```tsx
+import { useTextEmbeddings, CLIP_VIT_BASE_PATCH32_TEXT } from 'react-native-executorch';
+
+function CrossModalSearch() {
+  const imageEmbedder = useImageEmbeddings({
+    model: CLIP_VIT_BASE_PATCH32_IMAGE,
+  });
+  
+  const textEmbedder = useTextEmbeddings({
+    model: CLIP_VIT_BASE_PATCH32_TEXT,
+  });
+  
+  const searchImagesByText = async (
+    query: string,
+    imageDatabase: Array<{ uri: string; embedding: Float32Array }>
+  ) => {
+    const textEmbedding = await textEmbedder.forward(query);
+    
+    const results = imageDatabase
+      .map(img => ({
+        ...img,
+        similarity: cosineSimilarity(textEmbedding, img.embedding),
+      }))
+      .sort((a, b) => b.similarity - a.similarity);
+    
+    return results;
+  };
+  
+  return {
+    searchImagesByText,
+  };
+}
+```
+
+## Storage and Indexing
+
+### Persisting Embeddings
+
+Save embeddings for later use:
+
+```tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const saveEmbedding = async (imageId: string, embedding: Float32Array) => {
+  const data = {
+    imageId,
+    embedding: Array.from(embedding), // Convert to regular array
+    timestamp: Date.now(),
+  };
+  
+  await AsyncStorage.setItem(
+    `embedding_${imageId}`,
+    JSON.stringify(data)
+  );
+};
+
+const loadEmbedding = async (imageId: string): Promise<Float32Array | null> => {
+  const data = await AsyncStorage.getItem(`embedding_${imageId}`);
+  
+  if (!data) return null;
+  
+  const parsed = JSON.parse(data);
+  return new Float32Array(parsed.embedding);
+};
+```
+
+### Vector Database Integration
+
+For production applications, consider vector databases:
+
+```tsx
+// Example with a hypothetical vector DB client
+import { VectorDB } from 'vector-db-client';
+
+const vectorDB = new VectorDB();
+
+const indexImage = async (imageUri: string, metadata: any) => {
+  const embedding = await forward(imageUri);
+  
+  await vectorDB.insert({
+    vector: Array.from(embedding),
+    metadata: {
+      ...metadata,
+      uri: imageUri,
+    },
+  });
+};
+
+const searchVectorDB = async (queryUri: string, topK: number = 10) => {
+  const queryEmbedding = await forward(queryUri);
+  
+  const results = await vectorDB.search({
+    vector: Array.from(queryEmbedding),
+    topK,
+  });
+  
+  return results;
+};
+```
+
+## Performance Tips
+
+### Batch Processing
+
+Process multiple images efficiently:
+
+```tsx
+const batchGenerateEmbeddings = async (imageUris: string[]) => {
+  const embeddings: Float32Array[] = [];
+  
+  for (const uri of imageUris) {
+    const embedding = await forward(uri);
+    embeddings.push(embedding);
+  }
+  
+  return embeddings;
+};
+```
+
+### Caching
+
+Cache embeddings to avoid recomputation:
+
+```tsx
+const embeddingCache = new Map<string, Float32Array>();
+
+const getCachedEmbedding = async (imageUri: string) => {
+  if (embeddingCache.has(imageUri)) {
+    return embeddingCache.get(imageUri)!;
+  }
+  
+  const embedding = await forward(imageUri);
+  embeddingCache.set(imageUri, embedding);
+  
+  return embedding;
+};
+```
+
+### Dimensionality Reduction
+
+For large-scale applications, reduce embedding dimensions:
+
+```tsx
+// Using PCA or similar technique
+const reduceDimensions = (embedding: Float32Array, targetDim: number) => {
+  // Apply dimensionality reduction
+  // Return reduced embedding
+  // This is a placeholder - implement using ML library
+};
+```
+
+## Type Reference
+
+```typescript
+import { ResourceSource } from 'react-native-executorch';
+
+interface ImageEmbeddingsProps {
+  model: { modelSource: ResourceSource };
+  preventLoad?: boolean;
+}
+
+interface ImageEmbeddingsType {
+  error: RnExecutorchError | null;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  forward: (imageSource: string) => Promise<Float32Array>;
+}
+```
+
+## Related
+
+- [Text Embeddings](/llm/text-embeddings) - Generate text embeddings
+- [Classification](/computer-vision/classification) - Image categorization
+- [Object Detection](/computer-vision/object-detection) - Detect objects

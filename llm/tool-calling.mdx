@@ -1,0 +1,373 @@
+---
+title: Tool Calling
+description: Enable LLMs to call external functions and APIs
+---
+
+# Tool Calling
+
+Tool calling enables your LLM to interact with external functions, APIs, and data sources. The model can decide when to call a tool, extract the necessary parameters, and incorporate the results into its response.
+
+<Warning>
+Tool calling only works if your model's chat template supports it. Models like Llama 3.2, Qwen, and other instruction-tuned models typically support this feature.
+</Warning>
+
+## How It Works
+
+1. You provide tool definitions describing available functions
+2. User sends a message that might require a tool
+3. Model decides whether to call a tool and generates a structured tool call
+4. Your `executeToolCallback` runs the tool and returns the result
+5. Model incorporates the result into its final answer
+
+## Basic Setup
+
+```tsx
+import { useLLM } from 'react-native-executorch';
+import { LLAMA3_2_3B } from 'react-native-executorch/constants';
+
+function WeatherAssistant() {
+  const llm = useLLM({ model: LLAMA3_2_3B });
+
+  useEffect(() => {
+    if (llm.isReady) {
+      llm.configure({
+        chatConfig: {
+          systemPrompt: 'You are a helpful assistant with access to weather data.',
+        },
+        toolsConfig: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get the current weather for a location',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    location: {
+                      type: 'string',
+                      description: 'City name, e.g. San Francisco',
+                    },
+                    unit: {
+                      type: 'string',
+                      enum: ['celsius', 'fahrenheit'],
+                      description: 'Temperature unit',
+                    },
+                  },
+                  required: ['location'],
+                },
+              },
+            },
+          ],
+          executeToolCallback: async (toolCall) => {
+            if (toolCall.toolName === 'get_weather') {
+              const { location, unit = 'celsius' } = toolCall.arguments;
+              // Call your weather API
+              const weather = await fetchWeather(location, unit);
+              return `The weather in ${location} is ${weather.temp}° ${unit} with ${weather.condition}.`;
+            }
+            return null;
+          },
+          displayToolCalls: false, // Hide JSON tool calls in message history
+        },
+      });
+    }
+  }, [llm.isReady]);
+
+  return /* ... */;
+}
+```
+
+## Tool Definitions
+
+Tool definitions follow a JSON schema-like structure. The exact format depends on your model's chat template, but most models support this structure:
+
+```typescript
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'tool_name',
+      description: 'Clear description of what the tool does',
+      parameters: {
+        type: 'object',
+        properties: {
+          param1: {
+            type: 'string',
+            description: 'Description of param1',
+          },
+          param2: {
+            type: 'number',
+            description: 'Description of param2',
+          },
+        },
+        required: ['param1'], // Which parameters are required
+      },
+    },
+  },
+];
+```
+
+### Parameter Types
+
+- `string`: Text values
+- `number`: Numeric values
+- `boolean`: True/false values
+- `array`: Lists of values
+- `object`: Nested objects
+
+### Enums
+
+Restrict parameters to specific values:
+
+```typescript
+{
+  temperature_unit: {
+    type: 'string',
+    enum: ['celsius', 'fahrenheit', 'kelvin'],
+    description: 'Temperature measurement unit',
+  },
+}
+```
+
+## Execute Tool Callback
+
+The `executeToolCallback` function receives a `ToolCall` object and must return a string result:
+
+```typescript
+interface ToolCall {
+  toolName: string;
+  arguments: Object;
+}
+
+executeToolCallback: async (call: ToolCall) => Promise<string | null>
+```
+
+### Example with Multiple Tools
+
+```tsx
+const executeToolCallback = async (toolCall: ToolCall) => {
+  switch (toolCall.toolName) {
+    case 'get_weather': {
+      const { location, unit } = toolCall.arguments;
+      const weather = await weatherAPI.getCurrent(location);
+      return `Current weather in ${location}: ${weather.temp}°${unit}, ${weather.description}`;
+    }
+    
+    case 'search_restaurants': {
+      const { location, cuisine } = toolCall.arguments;
+      const restaurants = await restaurantAPI.search(location, cuisine);
+      return `Found ${restaurants.length} ${cuisine} restaurants in ${location}: ${restaurants.map(r => r.name).join(', ')}`;
+    }
+    
+    case 'get_time': {
+      const { timezone } = toolCall.arguments;
+      const time = new Date().toLocaleString('en-US', { timeZone: timezone });
+      return `The current time in ${timezone} is ${time}`;
+    }
+    
+    default:
+      return null; // Unknown tool
+  }
+};
+```
+
+## Complete Example: Calculator Assistant
+
+```tsx
+import React, { useEffect, useState } from 'react';
+import { View, Text, TextInput, Button, ScrollView } from 'react-native';
+import { useLLM } from 'react-native-executorch';
+import { LLAMA3_2_3B } from 'react-native-executorch/constants';
+
+function CalculatorAssistant() {
+  const [input, setInput] = useState('');
+  const llm = useLLM({ model: LLAMA3_2_3B });
+
+  useEffect(() => {
+    if (llm.isReady) {
+      llm.configure({
+        chatConfig: {
+          systemPrompt: 'You are a helpful math assistant. Use the calculator tool to perform precise calculations.',
+        },
+        toolsConfig: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'calculate',
+                description: 'Perform a mathematical calculation',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    expression: {
+                      type: 'string',
+                      description: 'Mathematical expression to evaluate, e.g. "2 + 2" or "sqrt(16)"',
+                    },
+                  },
+                  required: ['expression'],
+                },
+              },
+            },
+            {
+              type: 'function',
+              function: {
+                name: 'get_constant',
+                description: 'Get the value of a mathematical constant',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    constant: {
+                      type: 'string',
+                      enum: ['pi', 'e', 'phi', 'sqrt2'],
+                      description: 'The mathematical constant to retrieve',
+                    },
+                  },
+                  required: ['constant'],
+                },
+              },
+            },
+          ],
+          executeToolCallback: async (toolCall) => {
+            try {
+              if (toolCall.toolName === 'calculate') {
+                const { expression } = toolCall.arguments;
+                // In production, use a safe math evaluator library
+                const result = eval(expression); // CAUTION: eval is dangerous, use math.js or similar
+                return `The result of ${expression} is ${result}`;
+              }
+              
+              if (toolCall.toolName === 'get_constant') {
+                const { constant } = toolCall.arguments;
+                const constants = {
+                  pi: Math.PI,
+                  e: Math.E,
+                  phi: 1.618033988749895,
+                  sqrt2: Math.SQRT2,
+                };
+                return `The value of ${constant} is ${constants[constant]}`;
+              }
+              
+              return 'Unknown tool';
+            } catch (error) {
+              return `Error executing tool: ${error.message}`;
+            }
+          },
+          displayToolCalls: false, // Hide internal tool calls
+        },
+      });
+    }
+  }, [llm.isReady]);
+
+  const handleSend = async () => {
+    if (input.trim() && !llm.isGenerating) {
+      const message = input;
+      setInput('');
+      await llm.sendMessage(message);
+    }
+  };
+
+  return (
+    <View style={{ flex: 1, padding: 20 }}>
+      <ScrollView style={{ flex: 1 }}>
+        {llm.messageHistory.map((msg, idx) => (
+          <View key={idx} style={{ marginBottom: 10 }}>
+            <Text style={{ fontWeight: 'bold' }}>{msg.role}:</Text>
+            <Text>{msg.content}</Text>
+          </View>
+        ))}
+        {llm.isGenerating && (
+          <View style={{ marginBottom: 10 }}>
+            <Text style={{ fontWeight: 'bold' }}>assistant:</Text>
+            <Text>{llm.response}</Text>
+          </View>
+        )}
+      </ScrollView>
+      
+      <View style={{ flexDirection: 'row' }}>
+        <TextInput
+          value={input}
+          onChangeText={setInput}
+          placeholder="Ask a math question..."
+          style={{ flex: 1, borderWidth: 1, padding: 10 }}
+        />
+        <Button title="Send" onPress={handleSend} disabled={llm.isGenerating} />
+      </View>
+    </View>
+  );
+}
+```
+
+## Using Tools with generate()
+
+You can also pass tools directly to the `generate` method:
+
+```tsx
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_current_time',
+      description: 'Get the current time',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+];
+
+const messages = [
+  { role: 'system', content: 'You are a helpful assistant.' },
+  { role: 'user', content: 'What time is it?' },
+];
+
+const response = await llm.generate(messages, tools);
+```
+
+Note: When using `generate()`, you still need to configure `executeToolCallback` via `configure()`.
+
+## Display Tool Calls
+
+By default, JSON tool call representations are hidden from the message history. Set `displayToolCalls: true` to include them:
+
+```tsx
+toolsConfig: {
+  tools: [/* ... */],
+  executeToolCallback: async (call) => { /* ... */ },
+  displayToolCalls: true, // Show JSON tool calls in message history
+}
+```
+
+With `displayToolCalls: true`, the message history will include entries like:
+
+```json
+{
+  "role": "assistant",
+  "content": "{\"tool_calls\": [{\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}]}"
+}
+```
+
+## Best Practices
+
+1. **Clear descriptions** - Write detailed tool and parameter descriptions to help the model understand when and how to use each tool
+2. **Error handling** - Always wrap tool execution in try-catch blocks
+3. **Validate inputs** - Check that tool arguments are valid before executing
+4. **Return strings** - Always return string results, even for numeric or boolean results
+5. **Security** - Never execute arbitrary code (avoid `eval`). Use safe libraries for operations like math evaluation
+6. **Async operations** - Tool callbacks can be async, perfect for API calls
+7. **Null for unknown** - Return `null` if the tool name is unrecognized
+
+## Type Definitions
+
+```typescript
+type LLMTool = Object; // Format depends on your model's chat template
+
+interface ToolCall {
+  toolName: string;
+  arguments: Object;
+}
+
+interface ToolsConfig {
+  tools: LLMTool[];
+  executeToolCallback: (call: ToolCall) => Promise<string | null>;
+  displayToolCalls?: boolean;
+}
+```

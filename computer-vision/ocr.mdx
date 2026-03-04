@@ -1,0 +1,556 @@
+---
+title: Optical Character Recognition (OCR)
+description: Extract text from images with multilingual support
+---
+
+OCR (Optical Character Recognition) detects and recognizes text in images. React Native ExecuTorch provides both horizontal and vertical OCR capabilities with support for 80+ languages and scripts.
+
+## Quick Start
+
+```tsx
+import { useOCR, OCR_ENGLISH } from 'react-native-executorch';
+
+function TextExtractor() {
+  const { isReady, forward } = useOCR({
+    model: OCR_ENGLISH,
+  });
+
+  const extractText = async (imageUri: string) => {
+    const detections = await forward(imageUri);
+    // [{ bbox: [{ x, y }, ...], text: 'Hello', score: 0.95 }, ...]
+  };
+
+  return <Button title="Extract Text" onPress={() => extractText(imageUri)} />;
+}
+```
+
+## Hook API
+
+### `useOCR(props)`
+
+Manages an OCR pipeline (detector + recognizer) for horizontal text.
+
+#### Parameters
+
+<ParamField path="model" type="object" required>
+  Model configuration object
+  
+  <Expandable title="properties">
+    <ParamField path="detectorSource" type="ResourceSource" required>
+      Source of the text detector model (CRAFT)
+    </ParamField>
+    <ParamField path="recognizerSource" type="ResourceSource" required>
+      Source of the text recognizer model (CRNN)
+    </ParamField>
+    <ParamField path="language" type="OCRLanguage" required>
+      Language configuration (e.g., 'en', 'chSim', 'ja')
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Error object if loading or inference fails
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Whether both models are loaded and ready
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Whether OCR is currently processing
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Combined download progress (0-1)
+</ResponseField>
+
+<ResponseField name="forward" type="(imageSource: string) => Promise<OCRDetection[]>">
+  Perform OCR on an image. Returns array of text detections with bounding boxes, recognized text, and confidence scores.
+</ResponseField>
+
+### `useVerticalOCR(props)`
+
+Manages an OCR pipeline for vertical text (e.g., traditional Chinese, Japanese).
+
+#### Additional Parameters
+
+<ParamField path="independentCharacters" type="boolean" default="false">
+  Treat each character independently during recognition
+</ParamField>
+
+## Supported Languages
+
+React Native ExecuTorch supports 80+ languages across multiple scripts:
+
+### Latin Script
+
+```tsx
+import {
+  OCR_ENGLISH,
+  OCR_FRENCH,
+  OCR_GERMAN,
+  OCR_SPANISH,
+  OCR_ITALIAN,
+  OCR_PORTUGUESE,
+  OCR_DUTCH,
+  OCR_POLISH,
+  OCR_TURKISH,
+  OCR_INDONESIAN,
+  OCR_VIETNAMESE,
+  // ... and more
+} from 'react-native-executorch';
+```
+
+### Cyrillic Script
+
+```tsx
+import {
+  OCR_RUSSIAN,
+  OCR_UKRAINIAN,
+  OCR_BULGARIAN,
+  OCR_SERBIAN_CYRILLIC,
+  OCR_BELARUSIAN,
+  // ... and more
+} from 'react-native-executorch';
+```
+
+### Asian Languages
+
+```tsx
+import {
+  OCR_SIMPLIFIED_CHINESE,
+  OCR_JAPANESE,
+  OCR_KOREAN,
+  OCR_KANNADA,
+  OCR_TELUGU,
+} from 'react-native-executorch';
+```
+
+### Other Scripts
+
+```tsx
+import {
+  OCR_LATIN,
+  OCR_AFRIKAANS,
+  OCR_ALBANIAN,
+  OCR_CZECH,
+  OCR_DANISH,
+  // See full list in constants/ocr/models.ts
+} from 'react-native-executorch';
+```
+
+## OCR Detection Type
+
+```typescript
+interface OCRDetection {
+  bbox: Point[];        // Polygon defining text region
+  text: string;         // Recognized text
+  score: number;        // Confidence score (0-1)
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+```
+
+## Complete Example
+
+```tsx
+import React, { useState } from 'react';
+import { View, Image, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { useOCR, OCR_ENGLISH, OCRDetection } from 'react-native-executorch';
+import { launchImageLibrary } from 'react-native-image-picker';
+import Svg, { Polygon } from 'react-native-svg';
+
+function OCRDemo() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [detections, setDetections] = useState<OCRDetection[]>([]);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+
+  const { isReady, isGenerating, error, downloadProgress, forward } = useOCR({
+    model: OCR_ENGLISH,
+  });
+
+  const selectAndExtract = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    
+    if (result.assets && result.assets[0]) {
+      const asset = result.assets[0];
+      setImageUri(asset.uri!);
+      setImageDimensions({
+        width: asset.width || 300,
+        height: asset.height || 300,
+      });
+
+      try {
+        const textDetections = await forward(asset.uri!);
+        setDetections(textDetections);
+        
+        // Log all extracted text
+        const allText = textDetections.map(d => d.text).join(' ');
+        console.log('Extracted text:', allText);
+      } catch (err) {
+        console.error('OCR failed:', err);
+      }
+    }
+  };
+
+  const renderBoundingBoxes = () => {
+    if (!imageUri || detections.length === 0) return null;
+
+    return (
+      <Svg
+        style={StyleSheet.absoluteFill}
+        viewBox={`0 0 ${imageDimensions.width} ${imageDimensions.height}`}
+      >
+        {detections.map((detection, index) => {
+          const points = detection.bbox
+            .map(p => `${p.x},${p.y}`)
+            .join(' ');
+
+          return (
+            <Polygon
+              key={index}
+              points={points}
+              stroke="#00FF00"
+              strokeWidth="2"
+              fill="rgba(0, 255, 0, 0.1)"
+            />
+          );
+        })}
+      </Svg>
+    );
+  };
+
+  if (error) return <Text>Error: {error.message}</Text>;
+  
+  if (!isReady) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading OCR models...</Text>
+        <Text>{(downloadProgress * 100).toFixed(0)}%</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container}>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={selectAndExtract}
+        disabled={isGenerating}
+      >
+        <Text style={styles.buttonText}>
+          {isGenerating ? 'Extracting Text...' : 'Select & Extract Text'}
+        </Text>
+      </TouchableOpacity>
+
+      {imageUri && (
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: imageUri }} style={styles.image} />
+          {renderBoundingBoxes()}
+        </View>
+      )}
+
+      {detections.length > 0 && (
+        <View style={styles.results}>
+          <Text style={styles.title}>Extracted Text ({detections.length} regions):</Text>
+          {detections.map((detection, index) => (
+            <View key={index} style={styles.detection}>
+              <Text style={styles.text}>{detection.text}</Text>
+              <Text style={styles.confidence}>
+                {(detection.score * 100).toFixed(0)}% confidence
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20 },
+  button: { backgroundColor: '#007AFF', padding: 15, borderRadius: 8, marginBottom: 20 },
+  buttonText: { color: 'white', fontSize: 16, textAlign: 'center' },
+  imageContainer: { width: '100%', aspectRatio: 1, marginBottom: 20, position: 'relative' },
+  image: { width: '100%', height: '100%', borderRadius: 8 },
+  results: { padding: 15, backgroundColor: '#f5f5f5', borderRadius: 8 },
+  title: { fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
+  detection: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#ddd' },
+  text: { fontSize: 16, marginBottom: 4 },
+  confidence: { fontSize: 12, color: '#666' },
+});
+
+export default OCRDemo;
+```
+
+## Vertical OCR
+
+For vertical text (traditional Chinese, Japanese):
+
+```tsx
+import { useVerticalOCR, OCR_JAPANESE } from 'react-native-executorch';
+
+function VerticalTextExtractor() {
+  const { isReady, forward } = useVerticalOCR({
+    model: OCR_JAPANESE,
+    independentCharacters: false,
+  });
+
+  const extractVerticalText = async (imageUri: string) => {
+    const detections = await forward(imageUri);
+    return detections;
+  };
+
+  return <Button title="Extract Vertical Text" onPress={() => extractVerticalText(imageUri)} />;
+}
+```
+
+## Use Cases
+
+### Document Scanning
+
+Extract text from documents:
+
+```tsx
+const scanDocument = async (imageUri: string) => {
+  const detections = await forward(imageUri);
+  
+  // Sort by vertical position to maintain reading order
+  const sortedDetections = detections.sort((a, b) => {
+    const aY = Math.min(...a.bbox.map(p => p.y));
+    const bY = Math.min(...b.bbox.map(p => p.y));
+    return aY - bY;
+  });
+  
+  // Combine into document text
+  const documentText = sortedDetections
+    .map(d => d.text)
+    .join('\n');
+  
+  return documentText;
+};
+```
+
+### Business Card Reader
+
+Extract contact information:
+
+```tsx
+const parseBusinessCard = async (imageUri: string) => {
+  const detections = await forward(imageUri);
+  
+  const allText = detections.map(d => d.text).join(' ');
+  
+  // Extract email
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+  const email = allText.match(emailRegex)?.[0];
+  
+  // Extract phone
+  const phoneRegex = /\+?\d[\d\s-]{7,}\d/;
+  const phone = allText.match(phoneRegex)?.[0];
+  
+  return { email, phone, allText };
+};
+```
+
+### Receipt Parsing
+
+Extract items and prices:
+
+```tsx
+const parseReceipt = async (imageUri: string) => {
+  const detections = await forward(imageUri);
+  
+  const items: Array<{ name: string; price: string }> = [];
+  const priceRegex = /\$?\d+\.\d{2}/;
+  
+  for (const detection of detections) {
+    const priceMatch = detection.text.match(priceRegex);
+    if (priceMatch) {
+      items.push({
+        name: detection.text.replace(priceMatch[0], '').trim(),
+        price: priceMatch[0],
+      });
+    }
+  }
+  
+  return items;
+};
+```
+
+### Translation Aid
+
+Extract foreign text for translation:
+
+```tsx
+const extractForTranslation = async (imageUri: string, language: string) => {
+  // Use appropriate language model
+  const ocrModel = language === 'ja' ? OCR_JAPANESE : OCR_SIMPLIFIED_CHINESE;
+  
+  const ocr = useOCR({ model: ocrModel });
+  const detections = await ocr.forward(imageUri);
+  
+  const textToTranslate = detections
+    .filter(d => d.score > 0.7) // High confidence only
+    .map(d => d.text)
+    .join(' ');
+  
+  return textToTranslate;
+};
+```
+
+## Multilingual OCR
+
+Switch languages dynamically:
+
+```tsx
+function MultilingualOCR() {
+  const [language, setLanguage] = useState<'en' | 'ja' | 'chSim'>('en');
+  
+  const getModelForLanguage = (lang: string) => {
+    switch (lang) {
+      case 'ja': return OCR_JAPANESE;
+      case 'chSim': return OCR_SIMPLIFIED_CHINESE;
+      default: return OCR_ENGLISH;
+    }
+  };
+  
+  const { isReady, forward } = useOCR({
+    model: getModelForLanguage(language),
+  });
+  
+  return (
+    <View>
+      <Picker selectedValue={language} onValueChange={setLanguage}>
+        <Picker.Item label="English" value="en" />
+        <Picker.Item label="Japanese" value="ja" />
+        <Picker.Item label="Chinese (Simplified)" value="chSim" />
+      </Picker>
+      {/* Rest of UI */}
+    </View>
+  );
+}
+```
+
+## Performance Tips
+
+### Image Quality
+
+Optimize images for better results:
+
+- Use high-resolution images (minimum 300 DPI for documents)
+- Ensure good lighting and contrast
+- Avoid skewed or rotated text
+- Remove background noise
+
+### Preprocessing
+
+Enhance images before OCR:
+
+```tsx
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+
+const preprocessImage = async (imageUri: string) => {
+  const processed = await manipulateAsync(
+    imageUri,
+    [
+      { resize: { width: 1024 } }, // Standardize size
+      { rotate: 0 }, // Auto-rotate if needed
+    ],
+    { compress: 0.9, format: SaveFormat.JPEG }
+  );
+  
+  return processed.uri;
+};
+```
+
+### Confidence Filtering
+
+Filter low-confidence detections:
+
+```tsx
+const getHighConfidenceText = (
+  detections: OCRDetection[],
+  threshold: number = 0.7
+) => {
+  return detections
+    .filter(d => d.score >= threshold)
+    .map(d => d.text)
+    .join(' ');
+};
+```
+
+## Bounding Box Utilities
+
+Work with detection polygons:
+
+```tsx
+const getBoundingRect = (bbox: Point[]) => {
+  const xs = bbox.map(p => p.x);
+  const ys = bbox.map(p => p.y);
+  
+  return {
+    x: Math.min(...xs),
+    y: Math.min(...ys),
+    width: Math.max(...xs) - Math.min(...xs),
+    height: Math.max(...ys) - Math.min(...ys),
+  };
+};
+
+const sortByReadingOrder = (detections: OCRDetection[]) => {
+  return detections.sort((a, b) => {
+    const rectA = getBoundingRect(a.bbox);
+    const rectB = getBoundingRect(b.bbox);
+    
+    // Sort top to bottom, then left to right
+    if (Math.abs(rectA.y - rectB.y) < 10) {
+      return rectA.x - rectB.x;
+    }
+    return rectA.y - rectB.y;
+  });
+};
+```
+
+## Type Reference
+
+```typescript
+import { ResourceSource } from 'react-native-executorch';
+
+type OCRLanguage = keyof typeof symbols; // 'en' | 'ja' | 'chSim' | ...
+
+interface OCRProps {
+  model: {
+    detectorSource: ResourceSource;
+    recognizerSource: ResourceSource;
+    language: OCRLanguage;
+  };
+  preventLoad?: boolean;
+}
+
+interface VerticalOCRProps extends OCRProps {
+  independentCharacters?: boolean;
+}
+
+interface OCRType {
+  error: RnExecutorchError | null;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  forward: (imageSource: string) => Promise<OCRDetection[]>;
+}
+```
+
+## Related
+
+- [Object Detection](/computer-vision/object-detection) - Detect objects in images
+- [Classification](/computer-vision/classification) - Categorize images
+- [Custom Models](/advanced/custom-models) - Train custom OCR models

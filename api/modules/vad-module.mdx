@@ -1,0 +1,468 @@
+---
+title: 'VADModule'
+description: 'Class-based API for Voice Activity Detection'
+icon: 'waveform'
+---
+
+## Overview
+
+`VADModule` provides a class-based interface for Voice Activity Detection (VAD). It analyzes audio to detect segments containing speech, filtering out silence and non-speech audio.
+
+## When to Use
+
+**Use `VADModule` when:**
+- You need manual control over VAD lifecycle
+- You're working outside React components
+- You need to process audio programmatically
+- You want to integrate VAD into non-React code
+
+**Use `useVAD` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Extends
+
+`VADModule` extends [BaseModule](/api/modules/base-module).
+
+## Constructor
+
+```typescript
+new VADModule()
+```
+
+Creates a new VAD module instance.
+
+### Example
+
+```typescript
+import { VADModule } from 'react-native-executorch';
+
+const vad = new VADModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  model: { modelSource: ResourceSource },
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the VAD model from the specified source.
+
+#### Parameters
+
+<ParamField path="model.modelSource" type="ResourceSource" required>
+  Resource location of the VAD model binary.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await vad.load(
+  { modelSource: 'https://example.com/silero_vad.pte' },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### forward()
+
+```typescript
+async forward(waveform: Float32Array): Promise<Segment[]>
+```
+
+Executes the model's forward pass to detect speech segments in the audio.
+
+#### Parameters
+
+<ParamField path="waveform" type="Float32Array" required>
+  The input audio waveform as a Float32Array. Must represent a mono audio signal sampled at 16kHz.
+</ParamField>
+
+#### Returns
+
+A promise resolving to an array of detected speech segments. Each segment contains:
+- `start`: Start time in seconds
+- `end`: End time in seconds
+
+#### Example
+
+```typescript
+const segments = await vad.forward(audioWaveform);
+
+console.log(`Detected ${segments.length} speech segments:`);
+segments.forEach((segment, i) => {
+  console.log(`Segment ${i + 1}: ${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s`);
+  const duration = segment.end - segment.start;
+  console.log(`  Duration: ${duration.toFixed(2)}s`);
+});
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory and releases native resources.
+
+#### Example
+
+```typescript
+vad.delete();
+```
+
+## Complete Example: Audio Segmentation
+
+```typescript
+import { VADModule } from 'react-native-executorch';
+import AudioRecorder from 'react-native-audio-recorder';
+
+class AudioSegmenter {
+  private vad: VADModule;
+
+  constructor() {
+    this.vad = new VADModule();
+  }
+
+  async initialize() {
+    console.log('Loading VAD model...');
+    await this.vad.load(
+      { modelSource: 'https://example.com/silero_vad.pte' },
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('VAD ready!');
+  }
+
+  async detectSpeech(audioPath: string) {
+    // Load audio as 16kHz mono Float32Array
+    const waveform = await this.loadAudioFile(audioPath);
+    
+    const segments = await this.vad.forward(waveform);
+    
+    // Calculate statistics
+    const totalSpeechTime = segments.reduce(
+      (sum, seg) => sum + (seg.end - seg.start),
+      0
+    );
+    const totalTime = waveform.length / 16000; // 16kHz sample rate
+    const speechRatio = totalSpeechTime / totalTime;
+    
+    return {
+      segments,
+      totalSpeechTime,
+      totalTime,
+      speechRatio,
+      numSegments: segments.length
+    };
+  }
+
+  private async loadAudioFile(path: string): Promise<Float32Array> {
+    // Load and convert audio to 16kHz mono Float32Array
+    // Implementation depends on your audio library
+    const audioData = await AudioRecorder.loadFile(path);
+    return new Float32Array(audioData);
+  }
+
+  cleanup() {
+    this.vad.delete();
+  }
+}
+
+// Usage
+const segmenter = new AudioSegmenter();
+await segmenter.initialize();
+
+const result = await segmenter.detectSpeech('/path/to/audio.wav');
+
+console.log('Speech Detection Results:');
+console.log(`Total segments: ${result.numSegments}`);
+console.log(`Total speech time: ${result.totalSpeechTime.toFixed(2)}s`);
+console.log(`Total audio time: ${result.totalTime.toFixed(2)}s`);
+console.log(`Speech ratio: ${(result.speechRatio * 100).toFixed(1)}%`);
+
+result.segments.forEach((seg, i) => {
+  console.log(`  Segment ${i + 1}: ${seg.start.toFixed(2)}s - ${seg.end.toFixed(2)}s`);
+});
+
+segmenter.cleanup();
+```
+
+## Example: Audio Trimming
+
+```typescript
+class AudioTrimmer {
+  private vad: VADModule;
+
+  constructor() {
+    this.vad = new VADModule();
+  }
+
+  async initialize() {
+    await this.vad.load({ modelSource: 'https://example.com/vad.pte' });
+  }
+
+  async trimSilence(audioWaveform: Float32Array): Promise<Float32Array> {
+    const segments = await this.vad.forward(audioWaveform);
+    
+    if (segments.length === 0) {
+      return new Float32Array(0); // No speech detected
+    }
+    
+    // Get first and last speech segments
+    const firstSegment = segments[0];
+    const lastSegment = segments[segments.length - 1];
+    
+    // Convert time to sample indices (16kHz)
+    const startSample = Math.floor(firstSegment.start * 16000);
+    const endSample = Math.ceil(lastSegment.end * 16000);
+    
+    // Extract audio between first and last speech
+    return audioWaveform.slice(startSample, endSample);
+  }
+
+  async extractSpeechSegments(
+    audioWaveform: Float32Array
+  ): Promise<Float32Array[]> {
+    const segments = await this.vad.forward(audioWaveform);
+    
+    return segments.map(segment => {
+      const startSample = Math.floor(segment.start * 16000);
+      const endSample = Math.ceil(segment.end * 16000);
+      return audioWaveform.slice(startSample, endSample);
+    });
+  }
+
+  cleanup() {
+    this.vad.delete();
+  }
+}
+
+// Usage
+const trimmer = new AudioTrimmer();
+await trimmer.initialize();
+
+// Trim silence from beginning and end
+const trimmedAudio = await trimmer.trimSilence(audioWaveform);
+console.log(`Original: ${audioWaveform.length} samples`);
+console.log(`Trimmed: ${trimmedAudio.length} samples`);
+
+// Extract individual speech segments
+const speechSegments = await trimmer.extractSpeechSegments(audioWaveform);
+console.log(`Extracted ${speechSegments.length} speech segments`);
+
+trimmer.cleanup();
+```
+
+## Example: Real-time VAD
+
+```typescript
+class RealtimeVAD {
+  private vad: VADModule;
+  private audioBuffer: Float32Array = new Float32Array(0);
+  private isSpeaking = false;
+
+  constructor() {
+    this.vad = new VADModule();
+  }
+
+  async initialize() {
+    await this.vad.load({ modelSource: 'https://example.com/vad.pte' });
+  }
+
+  async processChunk(audioChunk: Float32Array): Promise<boolean> {
+    // Append new chunk to buffer
+    const newBuffer = new Float32Array(
+      this.audioBuffer.length + audioChunk.length
+    );
+    newBuffer.set(this.audioBuffer);
+    newBuffer.set(audioChunk, this.audioBuffer.length);
+    this.audioBuffer = newBuffer;
+    
+    // Keep only last 3 seconds of audio (at 16kHz)
+    const maxSamples = 3 * 16000;
+    if (this.audioBuffer.length > maxSamples) {
+      this.audioBuffer = this.audioBuffer.slice(-maxSamples);
+    }
+    
+    // Run VAD on buffered audio
+    const segments = await this.vad.forward(this.audioBuffer);
+    
+    // Check if there's recent speech (in last 0.5 seconds)
+    const currentTime = this.audioBuffer.length / 16000;
+    const recentSpeech = segments.some(
+      seg => currentTime - seg.end < 0.5
+    );
+    
+    const wasSpeaking = this.isSpeaking;
+    this.isSpeaking = recentSpeech;
+    
+    // Detect transitions
+    if (!wasSpeaking && this.isSpeaking) {
+      console.log('Speech started');
+    } else if (wasSpeaking && !this.isSpeaking) {
+      console.log('Speech stopped');
+    }
+    
+    return this.isSpeaking;
+  }
+
+  reset() {
+    this.audioBuffer = new Float32Array(0);
+    this.isSpeaking = false;
+  }
+
+  cleanup() {
+    this.vad.delete();
+  }
+}
+
+// Usage with audio stream
+const realtimeVAD = new RealtimeVAD();
+await realtimeVAD.initialize();
+
+// Process incoming audio chunks
+const audioStream = getAudioStream(); // Your audio source
+
+for await (const chunk of audioStream) {
+  const isSpeaking = await realtimeVAD.processChunk(chunk);
+  
+  if (isSpeaking) {
+    console.log('🎤 Speech detected');
+  }
+}
+
+realtimeVAD.cleanup();
+```
+
+## Example: Recording Optimization
+
+```typescript
+class SmartRecorder {
+  private vad: VADModule;
+  private recordedAudio: Float32Array[] = [];
+  private isRecordingSpeech = false;
+
+  constructor() {
+    this.vad = new VADModule();
+  }
+
+  async initialize() {
+    await this.vad.load({ modelSource: 'https://example.com/vad.pte' });
+  }
+
+  async startRecording(onSpeechDetected: () => void) {
+    const audioStream = getAudioStream();
+    
+    for await (const chunk of audioStream) {
+      const segments = await this.vad.forward(chunk);
+      const hasSpeech = segments.length > 0;
+      
+      if (hasSpeech) {
+        if (!this.isRecordingSpeech) {
+          this.isRecordingSpeech = true;
+          onSpeechDetected();
+        }
+        this.recordedAudio.push(chunk);
+      } else {
+        if (this.isRecordingSpeech) {
+          // Add a small buffer after speech ends
+          this.recordedAudio.push(chunk);
+          this.isRecordingSpeech = false;
+        }
+      }
+    }
+  }
+
+  getRecording(): Float32Array {
+    // Concatenate all recorded chunks
+    const totalLength = this.recordedAudio.reduce(
+      (sum, chunk) => sum + chunk.length,
+      0
+    );
+    
+    const result = new Float32Array(totalLength);
+    let offset = 0;
+    
+    for (const chunk of this.recordedAudio) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    
+    return result;
+  }
+
+  clear() {
+    this.recordedAudio = [];
+    this.isRecordingSpeech = false;
+  }
+
+  cleanup() {
+    this.vad.delete();
+  }
+}
+
+// Usage
+const recorder = new SmartRecorder();
+await recorder.initialize();
+
+await recorder.startRecording(() => {
+  console.log('📢 Speech detected, recording started');
+});
+
+const recording = recorder.getRecording();
+console.log(`Recorded ${recording.length} samples`);
+
+recorder.cleanup();
+```
+
+## Audio Format Requirements
+
+- **Sample rate**: 16kHz (16,000 Hz)
+- **Channels**: Mono (single channel)
+- **Format**: Float32Array with normalized values (-1.0 to 1.0)
+- **Minimum duration**: At least 0.5 seconds recommended for reliable detection
+
+## Use Cases
+
+- **Audio Trimming**: Remove silence from beginning and end of recordings
+- **Segmentation**: Split audio into speech and non-speech segments
+- **Recording Optimization**: Only record when speech is detected
+- **Speech Detection**: Determine if audio contains speech
+- **Preprocessing**: Prepare audio for speech recognition
+- **Wake Word Detection**: Trigger actions when speech is detected
+- **Conversation Analysis**: Identify when speakers are talking
+
+## Performance Considerations
+
+- VAD is very fast (typically < 10ms for 1 second of audio)
+- Process audio in chunks for real-time applications
+- Model works best with clean audio (low background noise)
+- Consider using a buffer for smoother real-time detection
+- Always call `delete()` when done to free resources
+
+## Common VAD Models
+
+- **Silero VAD**: High-quality, widely-used VAD model
+- Optimized for 16kHz audio
+- Works well in various noise conditions
+
+## See Also
+
+- [BaseModule](/api/modules/base-module) - Base class with shared functionality
+- [useVAD Hook](/api/hooks/use-vad) - React hook alternative
+- [Segment Type](/api/types/segment)
+- [ResourceSource Type](/api/types/resource-source)

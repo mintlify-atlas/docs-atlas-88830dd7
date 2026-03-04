@@ -1,0 +1,350 @@
+---
+title: 'SemanticSegmentationModule'
+description: 'Class-based API for semantic segmentation with type-safe label maps'
+icon: 'layer-group'
+---
+
+## Overview
+
+`SemanticSegmentationModule` provides a class-based interface for semantic segmentation tasks. It supports various DeepLab, FCN, and LRASPP models with type-safe label maps.
+
+## When to Use
+
+**Use `SemanticSegmentationModule` when:**
+- You need manual control over model lifecycle
+- You're working outside React components
+- You need multiple segmentation model instances
+- You want to integrate segmentation into non-React code
+
+**Use `useSemanticSegmentation` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Type Parameters
+
+```typescript
+SemanticSegmentationModule<T extends SemanticSegmentationModelName | LabelEnum>
+```
+
+<ParamField path="T" type="SemanticSegmentationModelName | LabelEnum">
+  Either a built-in model name or a custom label enum.
+</ParamField>
+
+## Static Methods
+
+### fromModelName()
+
+```typescript
+static async fromModelName<C extends SemanticSegmentationModelSources>(
+  config: C,
+  onDownloadProgress?: (progress: number) => void
+): Promise<SemanticSegmentationModule<ModelNameOf<C>>>
+```
+
+Creates a segmentation instance for a built-in model.
+
+#### Parameters
+
+<ParamField path="config" type="SemanticSegmentationModelSources" required>
+  Configuration object specifying which model to load and where to fetch it from.
+</ParamField>
+
+<ParamField path="onDownloadProgress" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Returns
+
+A Promise resolving to a `SemanticSegmentationModule` instance typed to the chosen model's label map.
+
+#### Example
+
+```typescript
+import { SemanticSegmentationModule } from 'react-native-executorch';
+
+const segmentation = await SemanticSegmentationModule.fromModelName(
+  {
+    modelName: 'deeplab-v3-resnet50',
+    modelSource: 'https://example.com/deeplab.pte'
+  },
+  (progress) => {
+    console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+  }
+);
+```
+
+### fromCustomConfig()
+
+```typescript
+static async fromCustomConfig<L extends LabelEnum>(
+  modelSource: ResourceSource,
+  config: SemanticSegmentationConfig<L>,
+  onDownloadProgress?: (progress: number) => void
+): Promise<SemanticSegmentationModule<L>>
+```
+
+Creates a segmentation instance with a user-provided label map and custom configuration.
+
+#### Parameters
+
+<ParamField path="modelSource" type="ResourceSource" required>
+  A fetchable resource pointing to the model binary.
+</ParamField>
+
+<ParamField path="config" type="SemanticSegmentationConfig<L>" required>
+  Configuration object with the label map and optional preprocessing parameters.
+</ParamField>
+
+<ParamField path="onDownloadProgress" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress.
+</ParamField>
+
+#### Returns
+
+A Promise resolving to a `SemanticSegmentationModule` instance typed to the provided label map.
+
+#### Example
+
+```typescript
+const MyLabels = {
+  BACKGROUND: 0,
+  FOREGROUND: 1
+} as const;
+
+const segmentation = await SemanticSegmentationModule.fromCustomConfig(
+  'https://example.com/custom_model.pte',
+  {
+    labelMap: MyLabels,
+    preprocessorConfig: {
+      normMean: [0.485, 0.456, 0.406],
+      normStd: [0.229, 0.224, 0.225]
+    }
+  }
+);
+```
+
+## Instance Methods
+
+### forward()
+
+```typescript
+async forward<K extends keyof ResolveLabels<T>>(
+  imageSource: string,
+  classesOfInterest?: K[],
+  resizeToInput?: boolean
+): Promise<Record<'ARGMAX', Int32Array> & Record<K, Float32Array>>
+```
+
+Executes the model's forward pass to perform semantic segmentation on the provided image.
+
+#### Parameters
+
+<ParamField path="imageSource" type="string" required>
+  Image source (file path, URI, or Base64-encoded string).
+</ParamField>
+
+<ParamField path="classesOfInterest" type="K[]" default="[]">
+  Optional list of label keys indicating which per-class probability masks to include in the output. `ARGMAX` is always returned regardless.
+</ParamField>
+
+<ParamField path="resizeToInput" type="boolean" default="true">
+  Whether to resize the output masks to the original input image dimensions. If `false`, returns the raw model output dimensions.
+</ParamField>
+
+#### Returns
+
+An object containing:
+- `ARGMAX`: An `Int32Array` of per-pixel class indices
+- Each requested class label: A `Float32Array` of per-pixel probabilities (0-1)
+
+#### Example
+
+```typescript
+const result = await segmentation.forward(
+  'file:///path/to/image.jpg',
+  ['PERSON', 'DOG'],  // Get probability masks for these classes
+  true  // Resize to input dimensions
+);
+
+// result.ARGMAX: Int32Array of class indices per pixel
+// result.PERSON: Float32Array of probabilities per pixel
+// result.DOG: Float32Array of probabilities per pixel
+
+console.log('Segmentation mask shape:', result.ARGMAX.length);
+console.log('Person probability map:', result.PERSON);
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory and releases native resources.
+
+#### Example
+
+```typescript
+segmentation.delete();
+```
+
+## Built-in Models
+
+Supported model names:
+
+**DeepLabV3 variants:**
+- `'deeplab-v3-resnet50'`
+- `'deeplab-v3-resnet101'`
+- `'deeplab-v3-mobilenet-v3-large'`
+- `'deeplab-v3-resnet50-quantized'`
+- `'deeplab-v3-resnet101-quantized'`
+- `'deeplab-v3-mobilenet-v3-large-quantized'`
+
+**LRASPP variants:**
+- `'lraspp-mobilenet-v3-large'`
+- `'lraspp-mobilenet-v3-large-quantized'`
+
+**FCN variants:**
+- `'fcn-resnet50'`
+- `'fcn-resnet101'`
+- `'fcn-resnet50-quantized'`
+- `'fcn-resnet101-quantized'`
+
+**Specialized:**
+- `'selfie-segmentation'` - Optimized for portrait segmentation
+
+Most models use Pascal VOC labels (21 classes). The selfie-segmentation model uses a binary segmentation label map.
+
+## Complete Example
+
+```typescript
+import { SemanticSegmentationModule } from 'react-native-executorch';
+
+class SegmentationProcessor {
+  private model: SemanticSegmentationModule<'deeplab-v3-resnet50'> | null = null;
+
+  async initialize() {
+    this.model = await SemanticSegmentationModule.fromModelName(
+      {
+        modelName: 'deeplab-v3-resnet50',
+        modelSource: 'https://example.com/deeplab.pte'
+      },
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+  }
+
+  async segment(imagePath: string) {
+    if (!this.model) {
+      throw new Error('Model not initialized');
+    }
+
+    // Get segmentation mask and probability maps for specific classes
+    const result = await this.model.forward(
+      imagePath,
+      ['PERSON', 'CAR', 'BICYCLE'],
+      true
+    );
+
+    // Process the ARGMAX mask to count pixels per class
+    const classCounts = new Map<number, number>();
+    for (let i = 0; i < result.ARGMAX.length; i++) {
+      const classIdx = result.ARGMAX[i];
+      classCounts.set(classIdx, (classCounts.get(classIdx) || 0) + 1);
+    }
+
+    return {
+      argmaxMask: result.ARGMAX,
+      personProbabilities: result.PERSON,
+      carProbabilities: result.CAR,
+      bicycleProbabilities: result.BICYCLE,
+      pixelCounts: classCounts
+    };
+  }
+
+  cleanup() {
+    this.model?.delete();
+    this.model = null;
+  }
+}
+
+// Usage
+const processor = new SegmentationProcessor();
+await processor.initialize();
+
+const segmentationData = await processor.segment('/path/to/image.jpg');
+console.log('Pixel counts per class:', segmentationData.pixelCounts);
+
+processor.cleanup();
+```
+
+## Visualizing Results
+
+```typescript
+// Convert ARGMAX mask to colored visualization
+function visualizeSegmentation(
+  argmaxMask: Int32Array,
+  width: number,
+  height: number
+) {
+  // Define colors for each class
+  const classColors = {
+    0: [0, 0, 0],        // Background - black
+    15: [255, 0, 0],     // Person - red
+    7: [0, 255, 0],      // Car - green
+    2: [0, 0, 255],      // Bicycle - blue
+  };
+
+  const coloredMask = new Uint8ClampedArray(width * height * 4);
+  
+  for (let i = 0; i < argmaxMask.length; i++) {
+    const classIdx = argmaxMask[i];
+    const color = classColors[classIdx] || [128, 128, 128]; // Default gray
+    
+    coloredMask[i * 4] = color[0];     // R
+    coloredMask[i * 4 + 1] = color[1]; // G
+    coloredMask[i * 4 + 2] = color[2]; // B
+    coloredMask[i * 4 + 3] = 255;      // A
+  }
+
+  return coloredMask;
+}
+```
+
+## Type Safety
+
+The module provides compile-time type safety for class labels:
+
+```typescript
+// Built-in model with Pascal VOC labels
+const segmentation = await SemanticSegmentationModule.fromModelName({
+  modelName: 'deeplab-v3-resnet50',
+  modelSource: '...'
+});
+
+const result = await segmentation.forward(
+  'image.jpg',
+  ['PERSON', 'CAR']  // TypeScript ensures these are valid DeeplabLabel keys
+);
+
+// Custom model with custom labels
+const MyLabels = { SKY: 0, GROUND: 1, BUILDING: 2 } as const;
+const customSeg = await SemanticSegmentationModule.fromCustomConfig(
+  'custom.pte',
+  { labelMap: MyLabels }
+);
+
+const customResult = await customSeg.forward(
+  'image.jpg',
+  ['SKY', 'BUILDING']  // TypeScript ensures these match MyLabels keys
+);
+```
+
+## See Also
+
+- [useSemanticSegmentation Hook](/api/hooks/use-semantic-segmentation) - React hook alternative
+- [DeeplabLabel Enum](/api/types/deeplab-label)
+- [SemanticSegmentationConfig Type](/api/types/semantic-segmentation-config)

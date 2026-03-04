@@ -1,0 +1,591 @@
+---
+title: Voice Activity Detection
+description: Detect speech segments in audio with precise timestamps
+---
+
+The `useVAD` hook provides Voice Activity Detection (VAD) to identify when speech is present in audio streams. It returns precise start and end timestamps for each speech segment, making it essential for voice-activated features and efficient audio processing.
+
+## Basic Usage
+
+```typescript
+import { useVAD } from 'react-native-executorch';
+
+function VoiceDetector() {
+  const { forward, isReady, error } = useVAD({
+    model: {
+      modelSource: require('./models/vad-model.pte'),
+    },
+  });
+
+  const detectSpeech = async (audioBuffer: Float32Array) => {
+    if (!isReady) return;
+
+    const segments = await forward(audioBuffer);
+
+    console.log(`Found ${segments.length} speech segments`);
+    segments.forEach((segment) => {
+      console.log(`Speech from ${segment.start}s to ${segment.end}s`);
+      console.log(`Duration: ${segment.end - segment.start}s`);
+    });
+  };
+
+  return (
+    <View>
+      {error && <Text>Error: {error.message}</Text>}
+      <Button onPress={detectSpeech} title="Detect Speech" disabled={!isReady} />
+    </View>
+  );
+}
+```
+
+## Hook Signature
+
+### useVAD(props)
+
+```typescript
+function useVAD(props: VADProps): VADType;
+```
+
+#### Parameters
+
+<ParamField path="model" type="object" required>
+  Model configuration object.
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Location of the VAD model .pte file. Can be a URL (string), local file (require), or resource ID (number).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading on mount. Useful for lazy loading scenarios.
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if model loading or inference fails.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the model has loaded successfully and is ready for detection.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether a detection is currently in progress.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="forward" type="(waveform: Float32Array) => Promise<Segment[]>">
+  Detect speech segments in the provided audio waveform. Returns an array of segments with start and end times.
+</ResponseField>
+
+## Detection Method
+
+### forward(waveform)
+
+Detect speech activity in audio:
+
+```typescript
+const { forward, isReady } = useVAD({ model });
+
+// Audio must be 16kHz mono
+const segments = await forward(audioBuffer);
+
+segments.forEach((segment) => {
+  console.log(`Speech: ${segment.start}s - ${segment.end}s`);
+});
+```
+
+## Types
+
+### Segment
+
+Represents a detected speech segment:
+
+```typescript
+interface Segment {
+  start: number; // Start time in seconds
+  end: number; // End time in seconds
+}
+```
+
+### VADProps
+
+Configuration for the VAD hook:
+
+```typescript
+interface VADProps {
+  model: {
+    modelSource: ResourceSource;
+  };
+  preventLoad?: boolean;
+}
+```
+
+### VADType
+
+Return type of the useVAD hook:
+
+```typescript
+interface VADType {
+  error: RnExecutorchError | null;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  forward(waveform: Float32Array): Promise<Segment[]>;
+}
+```
+
+## Audio Format Requirements
+
+<Warning>
+  Audio must be in the correct format or detection will fail.
+</Warning>
+
+- **Sample rate**: 16kHz (16,000 samples per second)
+- **Channels**: Mono (single channel)
+- **Data type**: Float32Array
+- **Value range**: -1.0 to 1.0 (normalized)
+- **Buffer layout**: Contiguous samples in time order
+
+### Converting Audio
+
+Example of preparing audio for VAD:
+
+```typescript
+function prepareAudioForVAD(audioBuffer: AudioBuffer): Float32Array {
+  // Resample to 16kHz
+  const targetSampleRate = 16000;
+  const resampled = resampleAudio(audioBuffer, targetSampleRate);
+
+  // Convert to mono by averaging channels
+  let mono: Float32Array;
+  if (audioBuffer.numberOfChannels === 1) {
+    mono = resampled.getChannelData(0);
+  } else {
+    const left = resampled.getChannelData(0);
+    const right = resampled.getChannelData(1);
+    mono = new Float32Array(left.length);
+    for (let i = 0; i < left.length; i++) {
+      mono[i] = (left[i] + right[i]) / 2;
+    }
+  }
+
+  // Normalize to [-1.0, 1.0]
+  const normalized = new Float32Array(mono.length);
+  for (let i = 0; i < mono.length; i++) {
+    normalized[i] = Math.max(-1, Math.min(1, mono[i]));
+  }
+
+  return normalized;
+}
+```
+
+## Advanced Usage
+
+### Processing Long Audio Files
+
+For long recordings, process in chunks to manage memory:
+
+```typescript
+const { forward } = useVAD({ model });
+
+const detectInLongAudio = async (
+  audioBuffer: Float32Array,
+  chunkDuration: number = 30 // 30 seconds per chunk
+) => {
+  const sampleRate = 16000;
+  const chunkSize = chunkDuration * sampleRate;
+  const allSegments: Segment[] = [];
+
+  for (let i = 0; i < audioBuffer.length; i += chunkSize) {
+    const chunk = audioBuffer.slice(i, Math.min(i + chunkSize, audioBuffer.length));
+    const segments = await forward(chunk);
+
+    // Adjust timestamps to account for chunk offset
+    const offset = i / sampleRate;
+    const adjustedSegments = segments.map((seg) => ({
+      start: seg.start + offset,
+      end: seg.end + offset,
+    }));
+
+    allSegments.push(...adjustedSegments);
+  }
+
+  return allSegments;
+};
+```
+
+### Real-Time Stream Processing
+
+Detect speech in live audio streams:
+
+```typescript
+function LiveVAD() {
+  const { forward, isReady } = useVAD({ model });
+  const [activeSpeech, setActiveSpeech] = useState(false);
+  const bufferRef = useRef<Float32Array[]>([]);
+
+  const processAudioChunk = async (chunk: Float32Array) => {
+    if (!isReady) return;
+
+    // Accumulate chunks
+    bufferRef.current.push(chunk);
+
+    // Process every second of audio
+    const totalSamples = bufferRef.current.reduce((sum, buf) => sum + buf.length, 0);
+    if (totalSamples >= 16000) {
+      // Concatenate buffers
+      const combined = new Float32Array(totalSamples);
+      let offset = 0;
+      for (const buf of bufferRef.current) {
+        combined.set(buf, offset);
+        offset += buf.length;
+      }
+
+      // Detect speech
+      const segments = await forward(combined);
+      setActiveSpeech(segments.length > 0);
+
+      // Clear buffer
+      bufferRef.current = [];
+    }
+  };
+
+  return (
+    <View>
+      <Text>Speech Active: {activeSpeech ? 'Yes' : 'No'}</Text>
+    </View>
+  );
+}
+```
+
+### Extracting Speech Segments
+
+Extract only the speech portions from audio:
+
+```typescript
+const extractSpeechSegments = async (
+  audioBuffer: Float32Array,
+  segments: Segment[]
+): Promise<Float32Array[]> => {
+  const sampleRate = 16000;
+  const speechChunks: Float32Array[] = [];
+
+  for (const segment of segments) {
+    const startSample = Math.floor(segment.start * sampleRate);
+    const endSample = Math.floor(segment.end * sampleRate);
+    const chunk = audioBuffer.slice(startSample, endSample);
+    speechChunks.push(chunk);
+  }
+
+  return speechChunks;
+};
+
+// Usage
+const { forward } = useVAD({ model });
+const segments = await forward(audioBuffer);
+const speechOnly = await extractSpeechSegments(audioBuffer, segments);
+
+// Process only speech segments
+for (const speechChunk of speechOnly) {
+  await transcribe(speechChunk);
+}
+```
+
+### Filtering Short Segments
+
+Remove brief noise detections:
+
+```typescript
+const filterShortSegments = (
+  segments: Segment[],
+  minDuration: number = 0.3 // 300ms minimum
+): Segment[] => {
+  return segments.filter((seg) => seg.end - seg.start >= minDuration);
+};
+
+// Usage
+const { forward } = useVAD({ model });
+const allSegments = await forward(audioBuffer);
+const speechSegments = filterShortSegments(allSegments, 0.5); // Only segments >= 500ms
+```
+
+### Merging Adjacent Segments
+
+Combine segments with small gaps:
+
+```typescript
+const mergeAdjacentSegments = (
+  segments: Segment[],
+  maxGap: number = 0.5 // 500ms maximum gap
+): Segment[] => {
+  if (segments.length === 0) return [];
+
+  const merged: Segment[] = [];
+  let current = { ...segments[0] };
+
+  for (let i = 1; i < segments.length; i++) {
+    const gap = segments[i].start - current.end;
+
+    if (gap <= maxGap) {
+      // Merge with current segment
+      current.end = segments[i].end;
+    } else {
+      // Save current and start new segment
+      merged.push(current);
+      current = { ...segments[i] };
+    }
+  }
+
+  merged.push(current);
+  return merged;
+};
+
+// Usage
+const segments = await forward(audioBuffer);
+const cleanSegments = mergeAdjacentSegments(
+  filterShortSegments(segments, 0.3),
+  0.5
+);
+```
+
+## Integration Examples
+
+### VAD + Speech to Text
+
+Optimize transcription by processing only speech:
+
+```typescript
+import { useVAD } from 'react-native-executorch';
+import { useSpeechToText } from 'react-native-executorch';
+
+function SmartTranscription() {
+  const vad = useVAD({ model: vadModel });
+  const stt = useSpeechToText({ model: sttModel });
+
+  const transcribeWithVAD = async (audioBuffer: Float32Array) => {
+    // Detect speech segments
+    const segments = await vad.forward(audioBuffer);
+    console.log(`Found ${segments.length} speech segments`);
+
+    // Extract and transcribe only speech portions
+    const sampleRate = 16000;
+    const transcriptions: string[] = [];
+
+    for (const segment of segments) {
+      const startSample = Math.floor(segment.start * sampleRate);
+      const endSample = Math.floor(segment.end * sampleRate);
+      const speechChunk = audioBuffer.slice(startSample, endSample);
+
+      const result = await stt.transcribe(speechChunk);
+      transcriptions.push(result.text);
+    }
+
+    return transcriptions.join(' ');
+  };
+
+  return <TranscriptionUI onTranscribe={transcribeWithVAD} />;
+}
+```
+
+### Voice Command Detection
+
+Trigger actions when speech is detected:
+
+```typescript
+function VoiceCommandListener() {
+  const { forward, isReady } = useVAD({ model });
+  const [listening, setListening] = useState(false);
+
+  const startListening = async () => {
+    setListening(true);
+
+    // Continuously monitor audio
+    const audioStream = await startAudioCapture();
+
+    for await (const chunk of audioStream) {
+      const segments = await forward(chunk);
+
+      if (segments.length > 0) {
+        // Speech detected - process command
+        await handleVoiceCommand(chunk);
+      }
+    }
+  };
+
+  return (
+    <Button
+      onPress={startListening}
+      title={listening ? 'Listening...' : 'Start Listening'}
+      disabled={!isReady}
+    />
+  );
+}
+```
+
+### Audio Visualization
+
+Visualize speech activity:
+
+```typescript
+function SpeechVisualizer({ audioBuffer }: { audioBuffer: Float32Array }) {
+  const { forward } = useVAD({ model });
+  const [segments, setSegments] = useState<Segment[]>([]);
+
+  useEffect(() => {
+    const detectSegments = async () => {
+      const detected = await forward(audioBuffer);
+      setSegments(detected);
+    };
+    detectSegments();
+  }, [audioBuffer]);
+
+  const duration = audioBuffer.length / 16000; // Total duration in seconds
+
+  return (
+    <View style={{ flexDirection: 'row', height: 50 }}>
+      {segments.map((seg, idx) => {
+        const left = (seg.start / duration) * 100;
+        const width = ((seg.end - seg.start) / duration) * 100;
+
+        return (
+          <View
+            key={idx}
+            style={{
+              position: 'absolute',
+              left: `${left}%`,
+              width: `${width}%`,
+              height: '100%',
+              backgroundColor: 'green',
+              opacity: 0.5,
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+}
+```
+
+## Error Handling
+
+```typescript
+const { forward, error, isReady } = useVAD({ model });
+
+if (error) {
+  console.error('VAD Error:', error.message);
+}
+
+try {
+  const segments = await forward(audioBuffer);
+} catch (err) {
+  if (err.code === 'MODULE_NOT_LOADED') {
+    console.error('Model not ready yet');
+  } else if (err.code === 'MODEL_GENERATING') {
+    console.error('Already processing audio');
+  } else {
+    console.error('Detection failed:', err.message);
+  }
+}
+```
+
+## Best Practices
+
+1. **Audio Quality**: Clean audio with minimal background noise produces better results.
+
+2. **Segment Filtering**: Always filter out very short segments (< 300ms) which are often noise.
+
+3. **Segment Merging**: Merge segments with small gaps to avoid fragmenting continuous speech.
+
+4. **Buffer Size**: Process at least 1-2 seconds of audio for reliable detection.
+
+5. **Memory Management**: For long recordings, process in chunks and clear buffers regularly.
+
+6. **Real-Time Processing**: Accumulate small chunks (100-200ms) before running VAD to reduce overhead.
+
+7. **Combined Workflows**: Use VAD before STT to reduce computational cost and improve accuracy.
+
+## Performance Tips
+
+- **Batch Processing**: Process multiple seconds at once rather than very small chunks.
+- **Async Processing**: Run VAD asynchronously to avoid blocking the UI thread.
+- **Cache Model**: The model is cached after first load, making subsequent uses faster.
+- **Threshold Tuning**: Experiment with minimum segment duration for your use case.
+
+## Common Use Cases
+
+### Meeting Recorder
+
+```typescript
+function MeetingRecorder() {
+  const { forward } = useVAD({ model });
+  const [speakers, setSpeakers] = useState<Segment[]>([]);
+
+  const analyzeMeeting = async (recording: Float32Array) => {
+    const segments = await forward(recording);
+    const filtered = filterShortSegments(segments, 1.0); // 1s minimum
+    const merged = mergeAdjacentSegments(filtered, 2.0); // 2s max gap
+
+    setSpeakers(merged);
+    return merged;
+  };
+
+  return (
+    <View>
+      <Text>Speech Segments: {speakers.length}</Text>
+      {speakers.map((seg, idx) => (
+        <Text key={idx}>
+          Speaker {idx + 1}: {seg.start.toFixed(1)}s - {seg.end.toFixed(1)}s
+        </Text>
+      ))}
+    </View>
+  );
+}
+```
+
+### Silence Detection
+
+```typescript
+const detectSilence = async (
+  audioBuffer: Float32Array,
+  vad: VADType
+): Promise<Segment[]> => {
+  const segments = await vad.forward(audioBuffer);
+  const duration = audioBuffer.length / 16000;
+  const silenceSegments: Segment[] = [];
+
+  // Before first speech
+  if (segments.length > 0 && segments[0].start > 0) {
+    silenceSegments.push({ start: 0, end: segments[0].start });
+  }
+
+  // Between speech segments
+  for (let i = 0; i < segments.length - 1; i++) {
+    silenceSegments.push({
+      start: segments[i].end,
+      end: segments[i + 1].start,
+    });
+  }
+
+  // After last speech
+  if (segments.length > 0 && segments[segments.length - 1].end < duration) {
+    silenceSegments.push({
+      start: segments[segments.length - 1].end,
+      end: duration,
+    });
+  }
+
+  return silenceSegments;
+};
+```
+
+## Related
+
+- [Speech to Text](/speech/speech-to-text) - Transcribe detected speech segments
+- [Speech Overview](/speech/overview) - Complete guide to speech features

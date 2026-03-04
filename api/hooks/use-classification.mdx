@@ -1,0 +1,378 @@
+---
+title: 'useClassification'
+description: 'React hook for image classification models'
+icon: 'tag'
+---
+
+## Overview
+
+The `useClassification` hook manages an image classification model instance. It processes images and returns predicted class labels with confidence scores.
+
+## Import
+
+```typescript
+import { useClassification } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const classifier = useClassification({ model, preventLoad }: ClassificationProps): ClassificationType
+```
+
+## Parameters
+
+<ParamField path="model" type="object" required>
+  Object containing model source
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source location of the classification model binary file (.pte)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading and downloading when the hook mounts
+</ParamField>
+
+## Return Value
+
+Returns an object with the following properties and methods:
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the classification model is loaded and ready to process images.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error during classification.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Executes the model's forward pass to classify the provided image.
+  
+  ```typescript
+  forward(imageSource: string): Promise<{ [category: string]: number }>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="imageSource" type="string" required>
+      Image source as a file path, URI, or base64 string
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to an object mapping category names to confidence scores (0-1).
+</ResponseField>
+
+## Usage Examples
+
+### Basic Image Classification
+
+```typescript
+import { useClassification } from 'react-native-executorch';
+import { useState } from 'react';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+function ImageClassifier() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [results, setResults] = useState<{ [key: string]: number } | null>(null);
+  
+  const classifier = useClassification({
+    model: {
+      modelSource: 'https://huggingface.co/.../mobilenet-v3.pte',
+    },
+  });
+  
+  const pickImage = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    if (result.assets?.[0]?.uri) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+  
+  const classifyImage = async () => {
+    if (!imageUri || !classifier.isReady) return;
+    
+    try {
+      const predictions = await classifier.forward(imageUri);
+      setResults(predictions);
+    } catch (error) {
+      console.error('Classification failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {classifier.isReady ? 'Ready' : 'Loading...'}</Text>
+      <Text>Progress: {(classifier.downloadProgress * 100).toFixed(0)}%</Text>
+      
+      <Button title="Pick Image" onPress={pickImage} />
+      
+      {imageUri && (
+        <Image source={{ uri: imageUri }} style={{ width: 300, height: 300 }} />
+      )}
+      
+      <Button
+        title="Classify"
+        onPress={classifyImage}
+        disabled={!classifier.isReady || !imageUri || classifier.isGenerating}
+      />
+      
+      {classifier.isGenerating && <ActivityIndicator />}
+      
+      {results && (
+        <View>
+          <Text>Results:</Text>
+          {Object.entries(results)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([category, score]) => (
+              <Text key={category}>
+                {category}: {(score * 100).toFixed(1)}%
+              </Text>
+            ))}
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Top-K Predictions
+
+```typescript
+import { useClassification } from 'react-native-executorch';
+import { useState } from 'react';
+
+function TopKClassifier() {
+  const [topPredictions, setTopPredictions] = useState<
+    Array<{ label: string; confidence: number }>
+  >([]);
+  
+  const classifier = useClassification({
+    model: {
+      modelSource: require('./models/resnet50.pte'),
+    },
+  });
+  
+  const getTopK = (results: { [key: string]: number }, k: number = 5) => {
+    return Object.entries(results)
+      .map(([label, confidence]) => ({ label, confidence }))
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, k);
+  };
+  
+  const classify = async (imageUri: string) => {
+    if (!classifier.isReady) return;
+    
+    try {
+      const results = await classifier.forward(imageUri);
+      const top5 = getTopK(results, 5);
+      setTopPredictions(top5);
+    } catch (error) {
+      console.error('Classification failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Top 5 Predictions:</Text>
+      {topPredictions.map((pred, idx) => (
+        <View key={idx} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text>{idx + 1}. {pred.label}</Text>
+          <View
+            style={{
+              width: `${pred.confidence * 100}%`,
+              height: 20,
+              backgroundColor: 'blue',
+            }}
+          />
+          <Text>{(pred.confidence * 100).toFixed(1)}%</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+```
+
+### Camera Integration
+
+```typescript
+import { useClassification } from 'react-native-executorch';
+import { Camera } from 'react-native-vision-camera';
+import { useState, useRef } from 'react';
+
+function CameraClassifier() {
+  const cameraRef = useRef<Camera>(null);
+  const [predictions, setPredictions] = useState<{ [key: string]: number } | null>(null);
+  
+  const classifier = useClassification({
+    model: {
+      modelSource: 'https://example.com/mobilenet.pte',
+    },
+  });
+  
+  const captureAndClassify = async () => {
+    if (!cameraRef.current || !classifier.isReady) return;
+    
+    try {
+      const photo = await cameraRef.current.takePhoto();
+      const results = await classifier.forward(photo.path);
+      setPredictions(results);
+    } catch (error) {
+      console.error('Capture or classification failed:', error);
+    }
+  };
+  
+  return (
+    <View style={{ flex: 1 }}>
+      <Camera
+        ref={cameraRef}
+        style={{ flex: 1 }}
+        device={/* camera device */}
+        isActive={true}
+      />
+      
+      <Button
+        title="Capture & Classify"
+        onPress={captureAndClassify}
+        disabled={!classifier.isReady || classifier.isGenerating}
+      />
+      
+      {predictions && (
+        <View style={{ position: 'absolute', bottom: 100 }}>
+          <Text style={{ color: 'white', fontSize: 18 }}>
+            Top prediction: {Object.keys(predictions)[0]}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Batch Classification
+
+```typescript
+import { useClassification } from 'react-native-executorch';
+import { useState } from 'react';
+
+function BatchClassifier() {
+  const [images, setImages] = useState<string[]>([]);
+  const [results, setResults] = useState<Array<{ uri: string; predictions: any }>>([]);
+  
+  const classifier = useClassification({
+    model: {
+      modelSource: require('./models/classifier.pte'),
+    },
+  });
+  
+  const classifyBatch = async () => {
+    if (!classifier.isReady) return;
+    
+    const batchResults = [];
+    
+    for (const imageUri of images) {
+      try {
+        const predictions = await classifier.forward(imageUri);
+        batchResults.push({ uri: imageUri, predictions });
+      } catch (error) {
+        console.error(`Failed to classify ${imageUri}:`, error);
+      }
+    }
+    
+    setResults(batchResults);
+  };
+  
+  return (
+    <View>
+      <Button title="Classify All" onPress={classifyBatch} />
+      
+      <ScrollView>
+        {results.map((result, idx) => (
+          <View key={idx}>
+            <Image source={{ uri: result.uri }} style={{ width: 100, height: 100 }} />
+            <Text>
+              Top: {Object.keys(result.predictions)[0]}
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+## Error Handling
+
+```typescript
+import { useClassification } from 'react-native-executorch';
+import { useEffect } from 'react';
+
+function ClassifierWithErrorHandling() {
+  const classifier = useClassification({
+    model: {
+      modelSource: 'https://example.com/model.pte',
+    },
+  });
+  
+  useEffect(() => {
+    if (classifier.error) {
+      console.error('Model error:', classifier.error.message);
+      console.error('Error code:', classifier.error.code);
+      // Handle error (show alert, retry, etc.)
+    }
+  }, [classifier.error]);
+  
+  const safeClassify = async (imageUri: string) => {
+    if (!classifier.isReady) {
+      throw new Error('Model is not ready');
+    }
+    
+    if (classifier.isGenerating) {
+      throw new Error('Model is currently processing another image');
+    }
+    
+    try {
+      return await classifier.forward(imageUri);
+    } catch (error) {
+      console.error('Classification failed:', error);
+      throw error;
+    }
+  };
+  
+  return <View>{/* UI */}</View>;
+}
+```
+
+## Notes
+
+<Info>
+  The model automatically loads when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  Only one image can be processed at a time. Wait for `isGenerating` to become false before calling `forward` again.
+</Warning>
+
+<Tip>
+  For real-time classification, consider debouncing or throttling the `forward` calls to avoid overwhelming the model.
+</Tip>
+
+## See Also
+
+- [useObjectDetection](/api/hooks/use-object-detection) - Detect objects with bounding boxes
+- [useImageEmbeddings](/api/hooks/use-image-embeddings) - Generate image embeddings
+- [Computer Vision Guide](/computer-vision/getting-started) - Complete CV integration guide

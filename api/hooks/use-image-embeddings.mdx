@@ -1,0 +1,554 @@
+---
+title: 'useImageEmbeddings'
+description: 'React hook for generating image feature vectors'
+icon: 'vector-square'
+---
+
+## Overview
+
+The `useImageEmbeddings` hook manages an image embeddings model instance for generating feature vectors from images. These embeddings can be used for image similarity search, clustering, and other computer vision tasks.
+
+## Import
+
+```typescript
+import { useImageEmbeddings } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const embeddings = useImageEmbeddings({ model, preventLoad }: ImageEmbeddingsProps): ImageEmbeddingsType
+```
+
+## Parameters
+
+<ParamField path="model" type="object" required>
+  Object containing model source
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source location of the image embeddings model binary file (.pte)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading and downloading when the hook mounts
+</ParamField>
+
+## Return Value
+
+Returns an object with the following properties and methods:
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the image embeddings model is loaded and ready to process images.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently generating embeddings for an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error during embedding generation.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Executes the model's forward pass to generate embeddings for the provided image.
+  
+  ```typescript
+  forward(imageSource: string): Promise<Float32Array>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="imageSource" type="string" required>
+      Image source as a file path, URI, or base64 string
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to a Float32Array containing the generated embedding vector.
+</ResponseField>
+
+## Usage Examples
+
+### Basic Image Embedding Generation
+
+```typescript
+import { useImageEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+function ImageEmbeddingsDemo() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [embedding, setEmbedding] = useState<Float32Array | null>(null);
+  
+  const embeddings = useImageEmbeddings({
+    model: {
+      modelSource: 'https://huggingface.co/.../image-embeddings.pte',
+    },
+  });
+  
+  const generateEmbedding = async (uri: string) => {
+    if (!embeddings.isReady) return;
+    
+    try {
+      const vector = await embeddings.forward(uri);
+      setEmbedding(vector);
+      
+      console.log('Embedding dimensions:', vector.length);
+      console.log('First 5 values:', Array.from(vector.slice(0, 5)));
+    } catch (error) {
+      console.error('Embedding generation failed:', error);
+    }
+  };
+  
+  const pickAndEmbed = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    if (result.assets?.[0]?.uri) {
+      const uri = result.assets[0].uri;
+      setImageUri(uri);
+      await generateEmbedding(uri);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {embeddings.isReady ? 'Ready' : 'Loading...'}</Text>
+      <Text>Progress: {(embeddings.downloadProgress * 100).toFixed(0)}%</Text>
+      
+      <Button
+        title="Pick Image & Generate Embedding"
+        onPress={pickAndEmbed}
+        disabled={!embeddings.isReady}
+      />
+      
+      {imageUri && (
+        <Image source={{ uri: imageUri }} style={{ width: 300, height: 300 }} />
+      )}
+      
+      {embeddings.isGenerating && <ActivityIndicator />}
+      
+      {embedding && (
+        <View>
+          <Text>Embedding Vector:</Text>
+          <Text>Dimensions: {embedding.length}</Text>
+          <Text>Type: Float32Array</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Image Similarity Search
+
+```typescript
+import { useImageEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+
+function ImageSimilaritySearch() {
+  const [queryImage, setQueryImage] = useState<string | null>(null);
+  const [imageLibrary, setImageLibrary] = useState<
+    Array<{ uri: string; embedding: Float32Array }>
+  >([]);
+  const [similarImages, setSimilarImages] = useState<
+    Array<{ uri: string; similarity: number }>
+  >([]);
+  
+  const embeddings = useImageEmbeddings({
+    model: {
+      modelSource: require('./models/clip-embeddings.pte'),
+    },
+  });
+  
+  // Cosine similarity between two vectors
+  const cosineSimilarity = (a: Float32Array, b: Float32Array): number => {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  };
+  
+  const findSimilarImages = async (queryUri: string) => {
+    if (!embeddings.isReady) return;
+    
+    try {
+      // Generate embedding for query image
+      const queryEmbedding = await embeddings.forward(queryUri);
+      
+      // Calculate similarity with all images in library
+      const similarities = imageLibrary.map((item) => ({
+        uri: item.uri,
+        similarity: cosineSimilarity(queryEmbedding, item.embedding),
+      }));
+      
+      // Sort by similarity (descending)
+      const sorted = similarities.sort((a, b) => b.similarity - a.similarity);
+      
+      // Get top 5 most similar
+      setSimilarImages(sorted.slice(0, 5));
+    } catch (error) {
+      console.error('Similarity search failed:', error);
+    }
+  };
+  
+  const addToLibrary = async (uri: string) => {
+    if (!embeddings.isReady) return;
+    
+    try {
+      const embedding = await embeddings.forward(uri);
+      setImageLibrary([...imageLibrary, { uri, embedding }]);
+    } catch (error) {
+      console.error('Failed to add to library:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Library size: {imageLibrary.length}</Text>
+      
+      {queryImage && (
+        <View>
+          <Text>Query Image:</Text>
+          <Image source={{ uri: queryImage }} style={{ width: 200, height: 200 }} />
+        </View>
+      )}
+      
+      <Text>Similar Images:</Text>
+      <ScrollView horizontal>
+        {similarImages.map((item, idx) => (
+          <View key={idx} style={{ margin: 5 }}>
+            <Image
+              source={{ uri: item.uri }}
+              style={{ width: 150, height: 150 }}
+            />
+            <Text>Similarity: {(item.similarity * 100).toFixed(1)}%</Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+### Image Clustering
+
+```typescript
+import { useImageEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+
+function ImageClustering() {
+  const [images, setImages] = useState<string[]>([]);
+  const [embeddings, setEmbeddings] = useState<Float32Array[]>([]);
+  const [clusters, setClusters] = useState<number[]>([]);
+  
+  const embeddingModel = useImageEmbeddings({
+    model: {
+      modelSource: 'https://example.com/embeddings.pte',
+    },
+  });
+  
+  // Simple k-means clustering
+  const kMeansClustering = (vectors: Float32Array[], k: number): number[] => {
+    // Simplified k-means implementation
+    // In production, use a proper clustering library
+    const assignments = new Array(vectors.length).fill(0);
+    // ... clustering logic ...
+    return assignments;
+  };
+  
+  const clusterImages = async (numClusters: number = 3) => {
+    if (!embeddingModel.isReady || images.length === 0) return;
+    
+    try {
+      // Generate embeddings for all images
+      const vectors: Float32Array[] = [];
+      
+      for (const imageUri of images) {
+        const vector = await embeddingModel.forward(imageUri);
+        vectors.push(vector);
+      }
+      
+      setEmbeddings(vectors);
+      
+      // Perform clustering
+      const clusterAssignments = kMeansClustering(vectors, numClusters);
+      setClusters(clusterAssignments);
+      
+      console.log('Clustered images into', numClusters, 'groups');
+    } catch (error) {
+      console.error('Clustering failed:', error);
+    }
+  };
+  
+  // Group images by cluster
+  const groupedImages = clusters.reduce((acc, cluster, idx) => {
+    if (!acc[cluster]) acc[cluster] = [];
+    acc[cluster].push(images[idx]);
+    return acc;
+  }, {} as Record<number, string[]>);
+  
+  return (
+    <View>
+      <Button title="Cluster Images" onPress={() => clusterImages(3)} />
+      
+      {Object.entries(groupedImages).map(([cluster, imgs]) => (
+        <View key={cluster}>
+          <Text>Cluster {cluster}:</Text>
+          <ScrollView horizontal>
+            {imgs.map((uri, idx) => (
+              <Image
+                key={idx}
+                source={{ uri }}
+                style={{ width: 100, height: 100, margin: 5 }}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      ))}
+    </View>
+  );
+}
+```
+
+### Duplicate Image Detection
+
+```typescript
+import { useImageEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+
+function DuplicateDetector() {
+  const [images, setImages] = useState<
+    Array<{ uri: string; embedding: Float32Array }>
+  >([]);
+  const [duplicates, setDuplicates] = useState<Array<[number, number]>>([]);
+  
+  const embeddings = useImageEmbeddings({
+    model: {
+      modelSource: require('./models/embeddings.pte'),
+    },
+  });
+  
+  const cosineSimilarity = (a: Float32Array, b: Float32Array): number => {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  };
+  
+  const findDuplicates = async (threshold: number = 0.95) => {
+    if (!embeddings.isReady || images.length < 2) return;
+    
+    const duplicatePairs: Array<[number, number]> = [];
+    
+    // Compare each pair of images
+    for (let i = 0; i < images.length; i++) {
+      for (let j = i + 1; j < images.length; j++) {
+        const similarity = cosineSimilarity(
+          images[i].embedding,
+          images[j].embedding
+        );
+        
+        if (similarity >= threshold) {
+          duplicatePairs.push([i, j]);
+        }
+      }
+    }
+    
+    setDuplicates(duplicatePairs);
+    console.log(`Found ${duplicatePairs.length} duplicate pairs`);
+  };
+  
+  const addImage = async (uri: string) => {
+    if (!embeddings.isReady) return;
+    
+    try {
+      const embedding = await embeddings.forward(uri);
+      setImages([...images, { uri, embedding }]);
+    } catch (error) {
+      console.error('Failed to process image:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Total images: {images.length}</Text>
+      <Text>Duplicate pairs: {duplicates.length}</Text>
+      
+      <Button title="Find Duplicates" onPress={() => findDuplicates(0.95)} />
+      
+      {duplicates.map((pair, idx) => (
+        <View key={idx} style={{ flexDirection: 'row' }}>
+          <Image
+            source={{ uri: images[pair[0]].uri }}
+            style={{ width: 100, height: 100 }}
+          />
+          <Text> = </Text>
+          <Image
+            source={{ uri: images[pair[1]].uri }}
+            style={{ width: 100, height: 100 }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+```
+
+### Building an Image Search Index
+
+```typescript
+import { useImageEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+function ImageSearchIndex() {
+  const [index, setIndex] = useState<
+    Array<{ id: string; uri: string; embedding: number[] }>
+  >([]);
+  
+  const embeddings = useImageEmbeddings({
+    model: {
+      modelSource: 'https://example.com/embeddings.pte',
+    },
+  });
+  
+  const buildIndex = async (imageUris: string[]) => {
+    if (!embeddings.isReady) return;
+    
+    const newIndex = [];
+    
+    for (const uri of imageUris) {
+      try {
+        const embedding = await embeddings.forward(uri);
+        
+        newIndex.push({
+          id: `img_${Date.now()}_${Math.random()}`,
+          uri,
+          embedding: Array.from(embedding), // Convert to regular array for storage
+        });
+      } catch (error) {
+        console.error(`Failed to index ${uri}:`, error);
+      }
+    }
+    
+    setIndex(newIndex);
+    
+    // Save to persistent storage
+    await AsyncStorage.setItem('imageIndex', JSON.stringify(newIndex));
+    
+    console.log(`Indexed ${newIndex.length} images`);
+  };
+  
+  const loadIndex = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('imageIndex');
+      if (stored) {
+        setIndex(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('Failed to load index:', error);
+    }
+  };
+  
+  const search = async (queryUri: string, topK: number = 5) => {
+    if (!embeddings.isReady || index.length === 0) return [];
+    
+    try {
+      const queryEmbedding = await embeddings.forward(queryUri);
+      
+      // Calculate similarities
+      const results = index.map((item) => {
+        const itemEmbedding = new Float32Array(item.embedding);
+        const similarity = cosineSimilarity(queryEmbedding, itemEmbedding);
+        return { ...item, similarity };
+      });
+      
+      // Sort and return top K
+      return results
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, topK);
+    } catch (error) {
+      console.error('Search failed:', error);
+      return [];
+    }
+  };
+  
+  return (
+    <View>
+      <Button title="Load Index" onPress={loadIndex} />
+      <Text>Index size: {index.length}</Text>
+    </View>
+  );
+}
+
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+```
+
+## Notes
+
+<Info>
+  The model automatically loads when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  Embedding vectors can be large (typically 128-2048 dimensions). Consider memory usage when processing many images.
+</Warning>
+
+<Tip>
+  For similarity search, cosine similarity is the standard metric. Values close to 1 indicate high similarity.
+</Tip>
+
+## Common Use Cases
+
+1. **Image Similarity Search**: Find visually similar images
+2. **Duplicate Detection**: Identify near-duplicate images
+3. **Image Clustering**: Group similar images together
+4. **Reverse Image Search**: Find images matching a query
+5. **Content-based Retrieval**: Build searchable image databases
+
+## Performance Considerations
+
+- **Embedding Size**: Typical dimensions range from 128 to 2048
+- **Batch Processing**: Process multiple images efficiently
+- **Storage**: Consider compressing embeddings for storage
+- **Indexing**: Use efficient data structures for large collections
+
+## See Also
+
+- [useTextEmbeddings](/api/hooks/use-text-embeddings) - Text embeddings
+- [useClassification](/api/hooks/use-classification) - Image classification
+- [Computer Vision Guide](/computer-vision/image-embeddings) - Image embeddings guide

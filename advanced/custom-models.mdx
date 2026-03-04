@@ -1,0 +1,325 @@
+---
+title: Custom Models
+description: Learn how to export and use your own AI models in React Native ExecuTorch
+---
+
+React Native ExecuTorch supports running custom AI models beyond the pre-configured ones. This guide explains how to export your PyTorch models to the `.pte` format and integrate them into your React Native application.
+
+## Overview
+
+To run custom models with ExecuTorch, you need to:
+
+1. Export your PyTorch model to the `.pte` format
+2. Optionally optimize the model for mobile devices
+3. Load the model using `useExecutorchModule` or `ExecutorchModule`
+
+## Exporting Models to .pte Format
+
+### Using the Python API
+
+The ExecuTorch Python API provides tools to export PyTorch models. Here's a basic example:
+
+```python
+import torch
+from executorch.exir import to_edge
+from torch.export import export
+from executorch.exir import EdgeProgramManager
+
+# 1. Load or define your model
+model = YourModel()
+model.eval()
+
+# 2. Create example inputs
+example_inputs = (torch.randn(1, 3, 224, 224),)
+
+# 3. Export to ExecuTorch
+aten_dialect = export(model, example_inputs)
+edge_program = to_edge(aten_dialect)
+executorch_program = edge_program.to_executorch()
+
+# 4. Save to .pte file
+with open("model.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+```
+
+### Key Export Steps
+
+**Step 1: Prepare Your Model**
+
+Ensure your model is in evaluation mode and all operations are supported by ExecuTorch:
+
+```python
+model.eval()
+# Freeze model parameters
+for param in model.parameters():
+    param.requires_grad = False
+```
+
+**Step 2: Define Representative Inputs**
+
+Provide example inputs that match your expected input shape:
+
+```python
+# For image models
+example_inputs = (torch.randn(1, 3, 224, 224),)
+
+# For text models
+example_inputs = (torch.randint(0, 1000, (1, 512)),)
+```
+
+**Step 3: Export with Backend Delegation**
+
+You can specify backends like XNNPACK for CPU optimization:
+
+```python
+from executorch.exir.backend.backend_api import to_backend
+from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+
+# Export to edge
+edge_program = to_edge(aten_dialect)
+
+# Apply XNNPACK backend
+edge_program = edge_program.to_backend(XnnpackPartitioner())
+
+# Convert to ExecuTorch
+executorch_program = edge_program.to_executorch()
+```
+
+## Using optimum-executorch
+
+[optimum-executorch](https://github.com/huggingface/optimum-executorch) is a library by Hugging Face that simplifies exporting models:
+
+### Installation
+
+```bash
+pip install optimum-executorch
+```
+
+### Export Hugging Face Models
+
+```python
+from optimum.executorch import ExecuTorchModelForImageClassification
+
+# Export a pre-trained model
+model = ExecuTorchModelForImageClassification.from_pretrained(
+    "google/mobilenet_v2_1.0_224",
+    export=True
+)
+
+# Save the exported model
+model.save_pretrained("./exported_model")
+```
+
+### Export Custom Models
+
+```python
+from optimum.executorch.exporter import export_to_executorch
+import torch
+
+# Your custom model
+model = MyCustomModel()
+
+# Export with optimum
+export_to_executorch(
+    model=model,
+    output="model.pte",
+    task="image-classification",
+    example_inputs=torch.randn(1, 3, 224, 224)
+)
+```
+
+## Advanced Export Options
+
+### Quantization During Export
+
+Reduce model size with quantization:
+
+```python
+from executorch.exir import EdgeCompileConfig
+from torch.ao.quantization.quantize_pt2e import convert_pt2e, prepare_pt2e
+from torch.ao.quantization.quantizer.xnnpack_quantizer import (
+    get_symmetric_quantization_config,
+    XNNPACKQuantizer,
+)
+
+# Prepare model for quantization
+quantizer = XNNPACKQuantizer()
+quantization_config = get_symmetric_quantization_config(is_per_channel=True)
+quantizer.set_global(quantization_config)
+
+# Export with quantization
+aten_dialect = export(model, example_inputs)
+m = prepare_pt2e(aten_dialect, quantizer)
+m = convert_pt2e(m)
+
+# Continue with edge export
+edge_program = to_edge(m)
+executorch_program = edge_program.to_executorch()
+```
+
+### Core ML Backend (iOS)
+
+For iOS devices, you can use Core ML for hardware acceleration:
+
+```python
+from executorch.exir.backend.backend_api import to_backend
+from executorch.backends.apple.coreml.partition.coreml_partitioner import CoreMLPartitioner
+
+edge_program = to_edge(aten_dialect)
+edge_program = edge_program.to_backend(CoreMLPartitioner())
+executorch_program = edge_program.to_executorch()
+```
+
+## Loading Custom Models in React Native
+
+### Using useExecutorchModule Hook
+
+Once you have your `.pte` file, load it in React Native:
+
+```typescript
+import { useExecutorchModule } from 'react-native-executorch';
+
+function MyComponent() {
+  const module = useExecutorchModule({
+    modelSource: 'https://your-server.com/model.pte',
+    // or from local assets
+    // modelSource: require('./assets/model.pte'),
+  });
+
+  const runInference = async () => {
+    if (!module.isReady) return;
+
+    const input = /* prepare your input tensor */;
+    const output = await module.forward([input]);
+    console.log('Model output:', output);
+  };
+
+  return (
+    // Your UI
+  );
+}
+```
+
+### Using TypeScript API
+
+For more control, use the TypeScript API directly:
+
+```typescript
+import { ExecutorchModule } from 'react-native-executorch';
+
+const module = new ExecutorchModule();
+
+await module.load({
+  modelSource: 'https://your-server.com/model.pte',
+});
+
+const output = await module.forward([inputTensor]);
+```
+
+## Input/Output Handling
+
+### Preparing Inputs
+
+Inputs must match the model's expected format:
+
+```typescript
+import { Tensor } from 'react-native-executorch';
+
+// Create a tensor from a flat array
+const input = Tensor.from({
+  data: new Float32Array([/* your data */]),
+  shape: [1, 3, 224, 224], // batch, channels, height, width
+  dtype: 'float32',
+});
+```
+
+### Processing Outputs
+
+```typescript
+const outputs = await module.forward([input]);
+
+// Access output data
+const outputData = outputs[0].data;
+const outputShape = outputs[0].shape;
+
+// Process results
+const result = processModelOutput(outputData, outputShape);
+```
+
+## Debugging Export Issues
+
+### Common Problems
+
+**Unsupported Operations**
+
+If your model uses operations not supported by ExecuTorch:
+
+```python
+# Check which ops are used
+from executorch.exir import ExecutorchProgramManager
+
+# This will show unsupported ops during export
+try:
+    executorch_program = edge_program.to_executorch()
+except Exception as e:
+    print(f"Export failed: {e}")
+```
+
+**Shape Mismatches**
+
+Ensure dynamic shapes are properly handled:
+
+```python
+from torch.export import Dim
+
+# Define dynamic dimensions
+batch = Dim("batch", min=1, max=32)
+dynamic_shapes = {"input": {0: batch}}
+
+aten_dialect = export(
+    model,
+    example_inputs,
+    dynamic_shapes=dynamic_shapes
+)
+```
+
+## Testing Your Exported Model
+
+### Validate with Python
+
+Before using in React Native, test with Python:
+
+```python
+from executorch.extension.pybindings.portable_lib import (
+    _load_for_executorch
+)
+
+# Load the .pte file
+module = _load_for_executorch("model.pte")
+
+# Test inference
+test_input = torch.randn(1, 3, 224, 224)
+output = module.forward((test_input,))
+print("Output shape:", output[0].shape)
+```
+
+## Best Practices
+
+1. **Start Simple**: Begin with basic models before attempting complex architectures
+2. **Test Incrementally**: Validate each export step before proceeding
+3. **Check Operator Support**: Verify all operations are supported by ExecuTorch
+4. **Optimize for Mobile**: Use quantization and backend delegation for better performance
+5. **Version Control**: Keep track of export scripts and model versions
+
+## Resources
+
+- [ExecuTorch Export Tutorial](https://pytorch.org/executorch/stable/tutorials/export-to-executorch-tutorial.html)
+- [ExecuTorch Python API Documentation](https://pytorch.org/executorch/stable/using-executorch-export.html)
+- [optimum-executorch GitHub](https://github.com/huggingface/optimum-executorch)
+- [Supported Operators](https://pytorch.org/executorch/stable/ir-ops-set-definition.html)
+
+## Next Steps
+
+- Learn about [Performance Optimization](/advanced/performance-optimization) techniques
+- Understand [Memory Management](/advanced/memory-management) for large models
+- Explore [Debugging](/advanced/debugging) strategies for custom models

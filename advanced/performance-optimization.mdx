@@ -1,0 +1,416 @@
+---
+title: Performance Optimization
+description: Optimize AI model performance in React Native ExecuTorch
+---
+
+Optimizing model performance is crucial for delivering smooth user experiences in mobile AI applications. This guide covers techniques to maximize inference speed and efficiency.
+
+## Overview
+
+Performance optimization in React Native ExecuTorch involves:
+
+- Model quantization to reduce size and increase speed
+- Backend delegation for hardware acceleration
+- Runtime configuration tuning
+- Application-level optimizations
+
+## Model Quantization
+
+Quantization reduces model precision from 32-bit floating point to lower bit representations, significantly improving performance.
+
+### XNNPACK Quantization
+
+XNNPACK is the recommended CPU backend for both iOS and Android:
+
+```python
+import torch
+from torch.ao.quantization.quantize_pt2e import convert_pt2e, prepare_pt2e
+from torch.ao.quantization.quantizer.xnnpack_quantizer import (
+    get_symmetric_quantization_config,
+    XNNPACKQuantizer,
+)
+from executorch.exir import to_edge
+from torch.export import export
+
+# Load your model
+model = YourModel()
+model.eval()
+
+# Prepare quantizer
+quantizer = XNNPACKQuantizer()
+quantization_config = get_symmetric_quantization_config(
+    is_per_channel=True,  # Better accuracy than per-tensor
+    is_dynamic=False,      # Static quantization for best performance
+)
+quantizer.set_global(quantization_config)
+
+# Export model
+example_inputs = (torch.randn(1, 3, 224, 224),)
+aten_dialect = export(model, example_inputs)
+
+# Apply quantization
+prepared_model = prepare_pt2e(aten_dialect, quantizer)
+
+# Calibrate with representative data (optional but recommended)
+with torch.no_grad():
+    for calibration_input in calibration_dataset:
+        prepared_model(calibration_input)
+
+# Convert to quantized model
+quantized_model = convert_pt2e(prepared_model)
+
+# Export to ExecuTorch
+edge_program = to_edge(quantized_model)
+executorch_program = edge_program.to_executorch()
+
+with open("model_quantized.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+```
+
+### Dynamic Quantization
+
+For models where static quantization is challenging:
+
+```python
+quantization_config = get_symmetric_quantization_config(
+    is_per_channel=True,
+    is_dynamic=True,  # Quantize weights only, activations at runtime
+)
+```
+
+### Per-Channel vs Per-Tensor
+
+```python
+# Per-channel (better accuracy, slightly slower)
+config = get_symmetric_quantization_config(is_per_channel=True)
+
+# Per-tensor (faster, lower accuracy)
+config = get_symmetric_quantization_config(is_per_channel=False)
+```
+
+## LLM Quantization Techniques
+
+For Large Language Models, specialized quantization methods provide significant benefits:
+
+### SpinQuant (Recommended)
+
+SpinQuant offers excellent quality-to-size ratio:
+
+```python
+from executorch.examples.models.llama2 import LlamaRunner
+
+# Export with SpinQuant
+# This requires using the ExecuTorch Llama export scripts
+# See: https://github.com/pytorch/executorch/tree/main/examples/models/llama2
+
+python -m executorch.examples.models.llama2.export_llama \
+  --checkpoint "path/to/checkpoint.pth" \
+  --params "path/to/params.json" \
+  --quantization_mode "spinquant" \
+  -o "model_spinquant.pte"
+```
+
+Memory savings comparison for Llama 3.2 1B:
+- Base model: 3.3 GB
+- SpinQuant: 1.9 GB (42% reduction)
+
+### QLoRA Quantization
+
+QLoRA provides another quantization option:
+
+```python
+python -m executorch.examples.models.llama2.export_llama \
+  --checkpoint "path/to/checkpoint.pth" \
+  --params "path/to/params.json" \
+  --quantization_mode "qlora" \
+  -o "model_qlora.pte"
+```
+
+### Choosing Quantization for LLMs
+
+| Method | Memory Usage | Quality | Best For |
+|--------|-------------|---------|----------|
+| Base (no quant) | Highest | Best | Devices with 6GB+ RAM |
+| SpinQuant | Medium | Excellent | Balanced performance/quality |
+| QLoRA | Medium-Low | Good | Memory-constrained devices |
+
+## Backend Delegation
+
+### XNNPACK Backend
+
+XNNPACK provides optimized CPU inference:
+
+```python
+from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+
+edge_program = to_edge(aten_dialect)
+edge_program = edge_program.to_backend(XnnpackPartitioner())
+executorch_program = edge_program.to_executorch()
+```
+
+XNNPACK is recommended because:
+- Highly optimized for ARM CPUs
+- Excellent operator coverage
+- Works on both iOS and Android
+- Mature and stable
+
+### Core ML Backend (iOS Only)
+
+Core ML can utilize iOS Neural Engine (ANE) for acceleration:
+
+```python
+from executorch.backends.apple.coreml.partition.coreml_partitioner import CoreMLPartitioner
+
+edge_program = to_edge(aten_dialect)
+edge_program = edge_program.to_backend(CoreMLPartitioner(
+    skip_ops_for_coreml_delegation=[],  # Ops to run on CPU
+    compute_precision="fp16",            # Use half precision
+))
+executorch_program = edge_program.to_executorch()
+```
+
+Core ML benefits:
+- Can leverage GPU and Neural Engine
+- Lower power consumption
+- Better thermal characteristics
+
+Core ML limitations:
+- iOS only
+- Limited operator support vs XNNPACK
+- May require fallback to CPU for some ops
+
+### Choosing a Backend
+
+```python
+# For cross-platform consistency: XNNPACK
+partitioner = XnnpackPartitioner()
+
+# For iOS-specific optimization: Core ML
+partitioner = CoreMLPartitioner()
+
+# For maximum compatibility: No delegation (CPU fallback)
+# Just use to_edge() without to_backend()
+```
+
+## Runtime Optimization
+
+### LLM Generation Configuration
+
+Optimize text generation parameters:
+
+```typescript
+import { useLLM } from 'react-native-executorch';
+
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+// Configure for performance
+llm.configure({
+  generationConfig: {
+    temperature: 0.7,
+    topP: 0.9,
+    maxTokens: 512,      // Lower = faster responses
+    sequenceLength: 1024, // Context window
+  },
+});
+```
+
+### Temperature and Sampling
+
+```typescript
+// Faster, more deterministic (lower temperature)
+llm.configure({
+  generationConfig: {
+    temperature: 0.3,  // More focused, faster
+    topP: 0.9,
+  },
+});
+
+// More creative but slower
+llm.configure({
+  generationConfig: {
+    temperature: 0.9,  // More random, requires more sampling
+    topP: 0.95,
+  },
+});
+```
+
+### Context Management
+
+Manage conversation history to control memory and speed:
+
+```typescript
+import { 
+  useLLM,
+  SlidingWindowContextStrategy,
+  MessageCountContextStrategy,
+} from 'react-native-executorch';
+
+// Limit context by token count
+const contextStrategy = new SlidingWindowContextStrategy({
+  maxTokens: 2048,  // Limit context size
+});
+
+// Or limit by message count
+const contextStrategy = new MessageCountContextStrategy({
+  maxMessages: 10,  // Keep last 10 messages only
+});
+
+llm.configure({
+  chatConfig: {
+    contextStrategy,
+  },
+});
+```
+
+## Application-Level Optimizations
+
+### Preload Models
+
+Load models during app startup or idle time:
+
+```typescript
+import { useEffect } from 'react';
+import { useLLM, LLAMA3_2_1B } from 'react-native-executorch';
+
+function App() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+
+  useEffect(() => {
+    // Model loads automatically on mount
+    // Use preventLoad prop if you need manual control
+  }, []);
+
+  return /* Your app */;
+}
+```
+
+### Cache Models Locally
+
+Download models once and reuse:
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// Check if model is already downloaded
+const models = await ExpoResourceFetcher.listDownloadedModels();
+console.log('Cached models:', models);
+
+// Pre-download models
+await ExpoResourceFetcher.fetch(
+  (progress) => console.log(`Download: ${progress * 100}%`),
+  'https://your-cdn.com/model.pte'
+);
+```
+
+### Batch Processing
+
+For computer vision tasks, process multiple images efficiently:
+
+```typescript
+import { useClassification } from 'react-native-executorch';
+
+const classifier = useClassification({ model: EFFICIENTNET_V2_S });
+
+// Process images sequentially
+for (const image of images) {
+  const result = await classifier.classify({ image });
+  processResult(result);
+}
+```
+
+### Interrupt Long Operations
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+// Start generation
+const promise = llm.generate(messages);
+
+// User cancels
+llm.interrupt();
+```
+
+## Monitoring Performance
+
+### Track Token Generation Speed
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+const startTime = Date.now();
+await llm.generate(messages);
+const endTime = Date.now();
+
+const tokenCount = llm.getGeneratedTokenCount();
+const tokensPerSecond = tokenCount / ((endTime - startTime) / 1000);
+
+console.log(`Speed: ${tokensPerSecond.toFixed(2)} tokens/sec`);
+```
+
+### Monitor Download Progress
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+useEffect(() => {
+  console.log(`Download: ${llm.downloadProgress * 100}%`);
+}, [llm.downloadProgress]);
+```
+
+## Platform-Specific Optimizations
+
+### iOS
+
+```typescript
+import { Platform } from 'react-native';
+
+if (Platform.OS === 'ios') {
+  // Use Core ML optimized models on iOS
+  // Ensure models were exported with CoreMLPartitioner
+}
+```
+
+### Android
+
+Increase RAM allocation for emulators:
+
+```bash
+# Edit AVD in Android Studio
+# Increase RAM to 4GB+ for LLM testing
+```
+
+## Benchmarking Results
+
+Based on measurements from the source repository:
+
+### LLM Performance (iPhone 17 Pro)
+
+| Model | Memory (GB) | Speed (est.) |
+|-------|-------------|-------------|
+| LLAMA3_2_1B | 3.1 | Fast |
+| LLAMA3_2_1B_SPINQUANT | 2.4 | Faster |
+| LLAMA3_2_3B | 7.3 | Medium |
+| LLAMA3_2_3B_SPINQUANT | 3.8 | Fast |
+
+### Computer Vision (iPhone 17 Pro)
+
+| Model | Memory (MB) | Backend |
+|-------|-------------|--------|
+| EFFICIENTNET_V2_S | 87 | Core ML |
+| SSDLITE_320_MOBILENET_V3_LARGE | 132 | XNNPACK |
+
+## Best Practices
+
+1. **Always Quantize**: Use quantization for production models
+2. **Choose the Right Backend**: XNNPACK for consistency, Core ML for iOS performance
+3. **Limit Context**: Use context strategies to manage memory
+4. **Monitor Performance**: Track metrics to identify bottlenecks
+5. **Test on Real Devices**: Emulators don't reflect real-world performance
+6. **Cache Models**: Download once, use repeatedly
+7. **Profile Your App**: Use React Native DevTools to identify performance issues
+
+## Next Steps
+
+- Learn about [Memory Management](/advanced/memory-management) strategies
+- Explore [Debugging](/advanced/debugging) performance issues
+- Read about [Custom Models](/advanced/custom-models) export optimization

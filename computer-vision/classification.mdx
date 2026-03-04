@@ -1,0 +1,413 @@
+---
+title: Image Classification
+description: Categorize images into predefined classes with on-device models
+---
+
+Image classification assigns labels to images based on their visual content. React Native ExecuTorch uses EfficientNet models for high-accuracy classification across 1000 ImageNet categories.
+
+## Quick Start
+
+```tsx
+import { useClassification, EFFICIENTNET_V2_S } from 'react-native-executorch';
+
+function ImageClassifier() {
+  const { isReady, isGenerating, error, downloadProgress, forward } = useClassification({
+    model: EFFICIENTNET_V2_S,
+  });
+
+  const classifyImage = async (imageUri: string) => {
+    const predictions = await forward(imageUri);
+    // { 'dog': 0.95, 'cat': 0.03, 'horse': 0.01, ... }
+  };
+
+  if (error) return <Text>Error: {error.message}</Text>;
+  if (!isReady) return <Text>Loading... {(downloadProgress * 100).toFixed(0)}%</Text>;
+
+  return <Button title="Classify" onPress={() => classifyImage(imageUri)} />;
+}
+```
+
+## Hook API
+
+### `useClassification(props)`
+
+Manages a classification model instance.
+
+#### Parameters
+
+<ParamField path="model" type="object" required>
+  Model configuration object
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source of the classification model binary (URL, file path, or require())
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading. Useful for lazy loading.
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Error object if model loading or inference fails
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Whether the model is loaded and ready for inference
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Whether the model is currently processing an image
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Model download progress (0-1)
+</ResponseField>
+
+<ResponseField name="forward" type="(imageSource: string) => Promise<Record<string, number>>">
+  Execute classification on an image. Returns a dictionary mapping category names to confidence scores (0-1).
+</ResponseField>
+
+## Available Models
+
+### EFFICIENTNET_V2_S
+
+EfficientNetV2-S optimized for mobile devices.
+
+```tsx
+import { EFFICIENTNET_V2_S } from 'react-native-executorch';
+
+const model = useClassification({
+  model: EFFICIENTNET_V2_S,
+});
+```
+
+**Specifications:**
+- **Categories**: 1000 ImageNet classes
+- **Architecture**: EfficientNetV2-Small
+- **Backend**: CoreML (iOS), XNNPACK (Android)
+- **Accuracy**: Top-1 ~84%
+- **Inference Time**: ~50-100ms on modern devices
+
+## Complete Example
+
+```tsx
+import React, { useState } from 'react';
+import { View, Image, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useClassification, EFFICIENTNET_V2_S } from 'react-native-executorch';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+function ImageClassificationDemo() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [predictions, setPredictions] = useState<Record<string, number> | null>(null);
+  
+  const { isReady, isGenerating, error, downloadProgress, forward } = useClassification({
+    model: EFFICIENTNET_V2_S,
+  });
+
+  const selectAndClassifyImage = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    
+    if (result.assets && result.assets[0].uri) {
+      const uri = result.assets[0].uri;
+      setImageUri(uri);
+      
+      try {
+        const results = await forward(uri);
+        setPredictions(results);
+      } catch (err) {
+        console.error('Classification failed:', err);
+      }
+    }
+  };
+
+  const getTopPredictions = (predictions: Record<string, number>, top: number = 5) => {
+    return Object.entries(predictions)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, top);
+  };
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>Error: {error.message}</Text>
+      </View>
+    );
+  }
+
+  if (!isReady) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading model...</Text>
+        <Text>{(downloadProgress * 100).toFixed(0)}%</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={selectAndClassifyImage}
+        disabled={isGenerating}
+      >
+        <Text style={styles.buttonText}>
+          {isGenerating ? 'Classifying...' : 'Select & Classify Image'}
+        </Text>
+      </TouchableOpacity>
+
+      {imageUri && (
+        <Image source={{ uri: imageUri }} style={styles.image} />
+      )}
+
+      {predictions && (
+        <View style={styles.results}>
+          <Text style={styles.title}>Top Predictions:</Text>
+          {getTopPredictions(predictions).map(([label, score]) => (
+            <View key={label} style={styles.prediction}>
+              <Text style={styles.label}>{label}</Text>
+              <Text style={styles.score}>{(score * 100).toFixed(1)}%</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  button: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  image: {
+    width: 300,
+    height: 300,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  results: {
+    width: '100%',
+    padding: 15,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  prediction: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+  },
+  label: {
+    fontSize: 16,
+    textTransform: 'capitalize',
+  },
+  score: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  error: {
+    color: 'red',
+    fontSize: 16,
+  },
+});
+
+export default ImageClassificationDemo;
+```
+
+## Use Cases
+
+### Image Organization
+
+Automatically categorize photos in gallery apps:
+
+```tsx
+const organizePhotos = async (photoUris: string[]) => {
+  const categorized: Record<string, string[]> = {};
+  
+  for (const uri of photoUris) {
+    const predictions = await forward(uri);
+    const topCategory = Object.entries(predictions)
+      .sort(([, a], [, b]) => b - a)[0][0];
+    
+    if (!categorized[topCategory]) {
+      categorized[topCategory] = [];
+    }
+    categorized[topCategory].push(uri);
+  }
+  
+  return categorized;
+};
+```
+
+### Content Moderation
+
+Filter inappropriate content:
+
+```tsx
+const moderateImage = async (imageUri: string) => {
+  const predictions = await forward(imageUri);
+  
+  const inappropriateCategories = ['weapon', 'explicit', 'violence'];
+  const hasInappropriateContent = Object.entries(predictions)
+    .some(([label, score]) => 
+      inappropriateCategories.includes(label) && score > 0.5
+    );
+  
+  return !hasInappropriateContent;
+};
+```
+
+### Product Recognition
+
+Identify products in retail applications:
+
+```tsx
+const identifyProduct = async (productImageUri: string) => {
+  const predictions = await forward(productImageUri);
+  
+  // Get top prediction
+  const [topLabel, confidence] = Object.entries(predictions)
+    .sort(([, a], [, b]) => b - a)[0];
+  
+  if (confidence > 0.7) {
+    return {
+      productType: topLabel,
+      confidence,
+    };
+  }
+  
+  return null;
+};
+```
+
+## Performance Tips
+
+### Image Preprocessing
+
+The model automatically handles image preprocessing, but you can optimize by:
+
+- Using appropriately sized images (224x224 to 512x512)
+- Avoiding extremely large images that need significant downscaling
+- Using JPEG format for better compression
+
+### Batch Classification
+
+Process multiple images efficiently:
+
+```tsx
+const classifyBatch = async (imageUris: string[]) => {
+  const results = [];
+  
+  for (const uri of imageUris) {
+    try {
+      const predictions = await forward(uri);
+      results.push({ uri, predictions });
+    } catch (error) {
+      console.error(`Failed to classify ${uri}:`, error);
+      results.push({ uri, predictions: null, error });
+    }
+  }
+  
+  return results;
+};
+```
+
+### Confidence Thresholds
+
+Filter low-confidence predictions:
+
+```tsx
+const getConfidentPredictions = (
+  predictions: Record<string, number>,
+  threshold: number = 0.3
+) => {
+  return Object.entries(predictions)
+    .filter(([, score]) => score >= threshold)
+    .sort(([, a], [, b]) => b - a);
+};
+```
+
+## Custom Models
+
+Use your own classification model:
+
+```tsx
+const { isReady, forward } = useClassification({
+  model: {
+    modelSource: 'https://your-server.com/custom-classifier.pte',
+  },
+});
+```
+
+<Note>
+Custom models must be in ExecuTorch `.pte` format and follow the classification model interface. See the [Custom Models](/advanced/custom-models) guide for details.
+</Note>
+
+## Troubleshooting
+
+### Model fails to load
+
+- Check internet connectivity for first-time downloads
+- Verify sufficient storage space
+- Check error code: `error.code`
+
+### Low accuracy
+
+- Ensure images are clear and well-lit
+- Verify the subject is the main focus of the image
+- Check that the category exists in ImageNet-1K classes
+
+### Slow inference
+
+- Reduce image resolution before processing
+- Ensure device has sufficient available memory
+- Avoid running multiple models simultaneously
+
+## Type Reference
+
+```typescript
+import { ResourceSource, RnExecutorchError } from 'react-native-executorch';
+
+interface ClassificationProps {
+  model: { modelSource: ResourceSource };
+  preventLoad?: boolean;
+}
+
+interface ClassificationType {
+  error: RnExecutorchError | null;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  forward: (imageSource: string) => Promise<Record<string, number>>;
+}
+```
+
+## Related
+
+- [Object Detection](/computer-vision/object-detection) - Detect and localize objects
+- [Image Embeddings](/computer-vision/image-embeddings) - Extract feature vectors
+- [Custom Models](/advanced/custom-models) - Use your own models

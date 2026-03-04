@@ -1,122 +1,206 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "React Native ExecuTorch",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#081875",
+    "light": "#7a8eb5",
+    "dark": "#e5e8ee"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/fbda0daf-ba94-4a29-a22e-0566e85ba42f.webp",
+  "logo": {
+    "light": "https://media.brand.dev/7efe1b48-323b-4a1b-94a5-dd3c6b0763e3.svg",
+    "dark": "https://media.brand.dev/7efe1b48-323b-4a1b-94a5-dd3c6b0763e3.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/software-mansion/react-native-executorch"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/software-mansion/react-native-executorch",
+      "discord": "https://discord.gg/ZGqqY55qkP"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "core-concepts/architecture",
+              "core-concepts/resource-fetching",
+              "core-concepts/model-loading",
+              "core-concepts/error-handling"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Large Language Models",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "llm/overview",
+              "llm/usellm-hook",
+              "llm/chat-configuration",
+              "llm/tool-calling",
+              "llm/context-strategies",
+              "llm/available-models"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Computer Vision",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "computer-vision/overview",
+              "computer-vision/classification",
+              "computer-vision/object-detection",
+              "computer-vision/semantic-segmentation",
+              "computer-vision/ocr",
+              "computer-vision/style-transfer",
+              "computer-vision/image-embeddings",
+              "computer-vision/text-to-image"
+            ]
+          },
+          {
+            "group": "Speech & Audio",
+            "pages": [
+              "speech/overview",
+              "speech/speech-to-text",
+              "speech/text-to-speech",
+              "speech/voice-activity-detection"
+            ]
+          },
+          {
+            "group": "Text Embeddings",
+            "pages": [
+              "text-embeddings/overview",
+              "text-embeddings/usage",
+              "text-embeddings/semantic-search"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/custom-models",
+              "advanced/performance-optimization",
+              "advanced/memory-management",
+              "advanced/debugging"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/expo-setup",
+              "guides/bare-react-native-setup",
+              "guides/migrating-models",
+              "guides/troubleshooting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Initialization",
             "pages": [
-              "api-reference/introduction"
+              "api/init-executorch"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "LLM Hooks",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/hooks/use-llm",
+              "api/hooks/use-tokenizer"
+            ]
+          },
+          {
+            "group": "Computer Vision Hooks",
+            "pages": [
+              "api/hooks/use-classification",
+              "api/hooks/use-object-detection",
+              "api/hooks/use-semantic-segmentation",
+              "api/hooks/use-ocr",
+              "api/hooks/use-vertical-ocr",
+              "api/hooks/use-style-transfer",
+              "api/hooks/use-image-embeddings",
+              "api/hooks/use-text-to-image"
+            ]
+          },
+          {
+            "group": "Speech Hooks",
+            "pages": [
+              "api/hooks/use-speech-to-text",
+              "api/hooks/use-text-to-speech",
+              "api/hooks/use-vad"
+            ]
+          },
+          {
+            "group": "Text Embeddings Hooks",
+            "pages": [
+              "api/hooks/use-text-embeddings"
+            ]
+          },
+          {
+            "group": "General Hooks",
+            "pages": [
+              "api/hooks/use-executorch-module"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "api/modules/llm-module",
+              "api/modules/classification-module",
+              "api/modules/object-detection-module",
+              "api/modules/semantic-segmentation-module",
+              "api/modules/ocr-module",
+              "api/modules/style-transfer-module",
+              "api/modules/image-embeddings-module",
+              "api/modules/text-to-image-module",
+              "api/modules/speech-to-text-module",
+              "api/modules/text-to-speech-module",
+              "api/modules/text-embeddings-module",
+              "api/modules/vad-module",
+              "api/modules/tokenizer-module",
+              "api/modules/executorch-module"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/llm-types",
+              "api/types/computer-vision-types",
+              "api/types/speech-types",
+              "api/types/common-types"
+            ]
+          },
+          {
+            "group": "Constants",
+            "pages": [
+              "api/constants/model-urls",
+              "api/constants/llm-defaults",
+              "api/constants/vision-constants"
+            ]
+          },
+          {
+            "group": "Errors",
+            "pages": [
+              "api/errors/error-handling",
+              "api/errors/error-codes"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

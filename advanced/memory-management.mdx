@@ -1,0 +1,476 @@
+---
+title: Memory Management
+description: Manage memory efficiently when running AI models in React Native ExecuTorch
+---
+
+Effective memory management is critical for running AI models on mobile devices. This guide covers memory requirements, best practices, and strategies for handling large models.
+
+## Overview
+
+AI models, especially Large Language Models (LLMs), can consume significant amounts of RAM. Understanding memory usage patterns and implementing proper management techniques ensures stable application performance.
+
+## Memory Requirements
+
+### Large Language Models
+
+Based on real-world measurements from React Native ExecuTorch:
+
+#### iPhone 17 Pro (iOS)
+
+| Model | Memory Usage (GB) |
+|-------|------------------|
+| LLAMA3_2_1B | 3.1 |
+| LLAMA3_2_1B_SPINQUANT | 2.4 |
+| LLAMA3_2_1B_QLORA | 2.8 |
+| LLAMA3_2_3B | 7.3 |
+| LLAMA3_2_3B_SPINQUANT | 3.8 |
+| LLAMA3_2_3B_QLORA | 4.0 |
+
+#### OnePlus 12 (Android)
+
+| Model | Memory Usage (GB) |
+|-------|------------------|
+| LLAMA3_2_1B | 3.3 |
+| LLAMA3_2_1B_SPINQUANT | 1.9 |
+| LLAMA3_2_1B_QLORA | 2.7 |
+| LLAMA3_2_3B | 7.1 |
+| LLAMA3_2_3B_SPINQUANT | 3.7 |
+| LLAMA3_2_3B_QLORA | 3.9 |
+
+### Computer Vision Models
+
+#### iOS (iPhone 17 Pro)
+
+| Model Type | Model | Memory (MB) |
+|-----------|-------|-------------|
+| Classification | EFFICIENTNET_V2_S | 87 |
+| Object Detection | SSDLITE_320_MOBILENET_V3_LARGE | 132 |
+| Style Transfer | STYLE_TRANSFER_CANDY | 380 |
+| OCR | CRAFT + CRNN | 1320 |
+| Text-to-Image | BK_SDM_TINY_VPRED | 6050 |
+
+#### Android (OnePlus 12)
+
+| Model Type | Model | Memory (MB) |
+|-----------|-------|-------------|
+| Classification | EFFICIENTNET_V2_S | 230 |
+| Object Detection | SSDLITE_320_MOBILENET_V3_LARGE | 164 |
+| Style Transfer | STYLE_TRANSFER_CANDY | 1200 |
+| OCR | CRAFT + CRNN | 1400 |
+| Text-to-Image | BK_SDM_TINY_VPRED | 6210 |
+
+### Speech Models
+
+| Model | Platform | Memory (MB) |
+|-------|----------|-------------|
+| WHISPER_TINY | iOS | 375 |
+| WHISPER_TINY | Android | 410 |
+| KOKORO_SMALL | iOS | 820 |
+| KOKORO_SMALL | Android | 820 |
+| KOKORO_MEDIUM | iOS | 1100 |
+| KOKORO_MEDIUM | Android | 1140 |
+
+Note: Text-to-Speech memory includes Phonemis package (100-150 MB).
+
+## Memory Management Strategies
+
+### 1. Choose Quantized Models
+
+Quantization significantly reduces memory footprint:
+
+```typescript
+import { 
+  useLLM,
+  LLAMA3_2_1B,
+  LLAMA3_2_1B_SPINQUANT,
+} from 'react-native-executorch';
+
+// Base model: ~3.3 GB on Android
+const llmBase = useLLM({ model: LLAMA3_2_1B });
+
+// SpinQuant model: ~1.9 GB on Android (42% reduction)
+const llmQuantized = useLLM({ model: LLAMA3_2_1B_SPINQUANT });
+```
+
+Memory savings:
+- SpinQuant: ~40-45% reduction
+- QLoRA: ~20-25% reduction
+
+### 2. Unload Models When Not Needed
+
+Free memory by deleting models:
+
+```typescript
+import { LLMModule } from 'react-native-executorch';
+
+const llm = new LLMModule();
+
+await llm.load({
+  modelSource: LLAMA3_2_1B,
+  tokenizerSource: /* ... */,
+  tokenizerConfigSource: /* ... */,
+});
+
+// Use the model
+await llm.generate(messages);
+
+// When done, free memory
+llm.delete();
+```
+
+### 3. Load Models on Demand
+
+Defer loading until needed:
+
+```typescript
+import { useLLM } from 'react-native-executorch';
+
+function ChatScreen() {
+  // Prevent auto-loading
+  const llm = useLLM({ 
+    model: LLAMA3_2_1B,
+    preventLoad: true,
+  });
+
+  const handleStartChat = async () => {
+    // Load only when user initiates chat
+    await llm.load();
+  };
+
+  return (
+    <Button onPress={handleStartChat} title="Start Chat" />
+  );
+}
+```
+
+### 4. Manage Context Window Size
+
+Limit conversation history to reduce memory usage:
+
+```typescript
+import { 
+  useLLM,
+  SlidingWindowContextStrategy,
+} from 'react-native-executorch';
+
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+// Limit context to 2048 tokens
+const contextStrategy = new SlidingWindowContextStrategy({
+  maxTokens: 2048,
+});
+
+llm.configure({
+  chatConfig: {
+    contextStrategy,
+  },
+});
+```
+
+Context strategies available:
+- `SlidingWindowContextStrategy`: Limits total token count
+- `MessageCountContextStrategy`: Limits number of messages
+- `NoopContextStrategy`: No limits (use with caution)
+
+### 5. Configure Generation Parameters
+
+Reduce memory by limiting generation length:
+
+```typescript
+llm.configure({
+  generationConfig: {
+    maxTokens: 256,      // Limit response length
+    sequenceLength: 1024, // Reduce context window
+  },
+});
+```
+
+### 6. Clean Up Downloads
+
+Remove cached model files when not needed:
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// List all downloaded models
+const models = await ExpoResourceFetcher.listDownloadedModels();
+console.log('Downloaded models:', models);
+
+// Check total size
+const totalSize = await ExpoResourceFetcher.getFilesTotalSize(
+  'https://model1.pte',
+  'https://model2.pte'
+);
+console.log(`Total size: ${totalSize / 1024 / 1024} MB`);
+
+// Delete unused models
+await ExpoResourceFetcher.deleteResources(
+  'https://old-model.pte'
+);
+```
+
+## React Component Lifecycle
+
+### Proper Cleanup with Hooks
+
+The `useLLM` hook automatically manages cleanup:
+
+```typescript
+import { useEffect } from 'react';
+import { useLLM, LLAMA3_2_1B } from 'react-native-executorch';
+
+function ChatComponent() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+
+  useEffect(() => {
+    // Model loads on mount
+    // Automatically cleaned up on unmount
+    return () => {
+      // Cleanup happens automatically
+    };
+  }, []);
+
+  return /* Your UI */;
+}
+```
+
+### Manual Management with TypeScript API
+
+```typescript
+import { useEffect, useRef } from 'react';
+import { LLMModule } from 'react-native-executorch';
+
+function ChatComponent() {
+  const llmRef = useRef<LLMModule | null>(null);
+
+  useEffect(() => {
+    const llm = new LLMModule();
+    llmRef.current = llm;
+
+    // Load model
+    llm.load({
+      modelSource: LLAMA3_2_1B,
+      tokenizerSource: /* ... */,
+      tokenizerConfigSource: /* ... */,
+    });
+
+    // Cleanup on unmount
+    return () => {
+      llm.delete();
+    };
+  }, []);
+
+  return /* Your UI */;
+}
+```
+
+## Handling Memory Warnings
+
+### iOS Memory Warnings
+
+```typescript
+import { AppState, Platform } from 'react-native';
+import { useEffect, useRef } from 'react';
+
+function App() {
+  const llmRef = useRef<LLMModule | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'ios') {
+      const subscription = AppState.addEventListener('memoryWarning', () => {
+        console.warn('Memory warning received');
+        // Free up memory
+        if (llmRef.current) {
+          llmRef.current.delete();
+          llmRef.current = null;
+        }
+      });
+
+      return () => subscription.remove();
+    }
+  }, []);
+
+  return /* Your app */;
+}
+```
+
+### Android Low Memory
+
+```typescript
+import { DeviceEventEmitter, Platform } from 'react-native';
+
+if (Platform.OS === 'android') {
+  DeviceEventEmitter.addListener('onTrimMemory', (event) => {
+    console.log('Memory trim level:', event.level);
+    if (event.level >= 40) { // TRIM_MEMORY_RUNNING_CRITICAL
+      // Free memory
+      llm.delete();
+    }
+  });
+}
+```
+
+## Best Practices for LLMs
+
+### 1. Start with Quantized Models
+
+```typescript
+// Recommended for most use cases
+const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT });
+```
+
+### 2. Monitor Memory Usage
+
+```typescript
+import { useEffect } from 'react';
+
+function ChatApp() {
+  const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT });
+
+  useEffect(() => {
+    if (llm.isReady) {
+      console.log('Model loaded and ready');
+    }
+  }, [llm.isReady]);
+
+  useEffect(() => {
+    if (llm.error) {
+      console.error('Model error:', llm.error);
+      // Handle OOM or other errors
+    }
+  }, [llm.error]);
+
+  return /* Your UI */;
+}
+```
+
+### 3. Implement Lazy Loading
+
+```typescript
+import { useState } from 'react';
+
+function App() {
+  const [modelLoaded, setModelLoaded] = useState(false);
+  const llm = useLLM({ 
+    model: LLAMA3_2_1B_SPINQUANT,
+    preventLoad: !modelLoaded,
+  });
+
+  const handleUserAction = () => {
+    setModelLoaded(true); // Trigger model load
+  };
+
+  return (
+    <Button onPress={handleUserAction} title="Load Model" />
+  );
+}
+```
+
+### 4. Use Message History Management
+
+```typescript
+import { MessageCountContextStrategy } from 'react-native-executorch';
+
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+// Keep only recent messages
+llm.configure({
+  chatConfig: {
+    contextStrategy: new MessageCountContextStrategy({
+      maxMessages: 10,
+    }),
+  },
+});
+
+// Or manually manage messages
+const deleteOldMessages = () => {
+  // Delete messages before index 5
+  llm.deleteMessage(5);
+};
+```
+
+## Device-Specific Recommendations
+
+### iOS Devices
+
+```typescript
+// iPhone 15 Pro and newer: Can handle 3B models
+const llm = useLLM({ model: LLAMA3_2_3B_SPINQUANT }); // 3.8 GB
+
+// iPhone 12-14: Use 1B models
+const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT }); // 2.4 GB
+
+// Older devices: Use smaller models or computer vision only
+```
+
+### Android Devices
+
+```typescript
+// Devices with 8GB+ RAM: 3B models
+const llm = useLLM({ model: LLAMA3_2_3B_SPINQUANT }); // 3.7 GB
+
+// Devices with 6GB RAM: 1B quantized models
+const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT }); // 1.9 GB
+
+// Devices with 4GB RAM: Computer vision models only
+```
+
+## Testing Memory Usage
+
+### Android Emulator Configuration
+
+Increase emulator RAM for testing LLMs:
+
+1. Open Android Studio
+2. Go to AVD Manager
+3. Edit your virtual device
+4. Increase RAM to 4GB or more
+5. Apply changes
+
+### iOS Simulator
+
+iOS Simulator reflects host machine memory, but performance characteristics differ from real devices. Always test on physical devices.
+
+## Troubleshooting Memory Issues
+
+### App Crashes During Model Load
+
+```typescript
+try {
+  await llm.load();
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.MemoryAllocationFailed) {
+    console.error('Not enough memory to load model');
+    // Use a smaller model or quantized version
+  }
+}
+```
+
+### Out of Memory During Generation
+
+```typescript
+// Reduce context and generation length
+llm.configure({
+  generationConfig: {
+    maxTokens: 128,       // Smaller responses
+    sequenceLength: 512,  // Smaller context
+  },
+});
+```
+
+## Best Practices Summary
+
+1. **Use Quantized Models**: SpinQuant or QLoRA for LLMs
+2. **Manage Lifecycle**: Clean up models when components unmount
+3. **Limit Context**: Use context strategies to bound memory usage
+4. **Monitor Status**: Track `isReady` and `error` states
+5. **Test on Real Devices**: Emulators don't reflect real memory constraints
+6. **Handle Memory Warnings**: Implement platform-specific handlers
+7. **Clean Downloads**: Remove unused cached models
+8. **Choose Appropriate Models**: Match model size to target device capabilities
+
+## Next Steps
+
+- Learn about [Performance Optimization](/advanced/performance-optimization)
+- Explore [Debugging](/advanced/debugging) memory-related issues
+- Read the [Troubleshooting Guide](/guides/troubleshooting)

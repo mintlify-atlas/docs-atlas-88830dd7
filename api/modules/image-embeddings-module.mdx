@@ -1,0 +1,365 @@
+---
+title: 'ImageEmbeddingsModule'
+description: 'Class-based API for generating image embeddings'
+icon: 'vector-square'
+---
+
+## Overview
+
+`ImageEmbeddingsModule` provides a class-based interface for generating dense vector embeddings from images. These embeddings can be used for image similarity search, clustering, or as features for downstream tasks.
+
+## When to Use
+
+**Use `ImageEmbeddingsModule` when:**
+- You need manual control over model lifecycle
+- You're working outside React components
+- You need to process images programmatically
+- You want to integrate image embeddings into non-React code
+
+**Use `useImageEmbeddings` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Extends
+
+`ImageEmbeddingsModule` extends [BaseModule](/api/modules/base-module), inheriting core functionality.
+
+## Constructor
+
+```typescript
+new ImageEmbeddingsModule()
+```
+
+Creates a new image embeddings module instance.
+
+### Example
+
+```typescript
+import { ImageEmbeddingsModule } from 'react-native-executorch';
+
+const embedder = new ImageEmbeddingsModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  model: { modelSource: ResourceSource },
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the image embeddings model from the specified source.
+
+#### Parameters
+
+<ParamField path="model.modelSource" type="ResourceSource" required>
+  Resource location of the model binary.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await embedder.load(
+  { modelSource: 'https://example.com/clip_image_encoder.pte' },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### forward()
+
+```typescript
+async forward(imageSource: string): Promise<Float32Array>
+```
+
+Executes the model's forward pass and returns an embedding vector for the given image.
+
+#### Parameters
+
+<ParamField path="imageSource" type="string" required>
+  The image source (URI/URL) to embed. Can be:
+  - A file path (e.g., `'/path/to/image.jpg'`)
+  - A URI (e.g., `'file:///path/to/image.jpg'` or `'https://example.com/image.jpg'`)
+  - A Base64-encoded string
+</ParamField>
+
+#### Returns
+
+A `Float32Array` containing the image embeddings (typically 512 or 768 dimensions).
+
+#### Example
+
+```typescript
+const embedding = await embedder.forward('file:///path/to/image.jpg');
+console.log('Embedding dimensions:', embedding.length);
+console.log('Embedding:', embedding);
+// Float32Array(512) [0.123, -0.456, 0.789, ...]
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory and releases native resources. Always call this when done.
+
+#### Example
+
+```typescript
+embedder.delete();
+```
+
+## Complete Example
+
+```typescript
+import { ImageEmbeddingsModule } from 'react-native-executorch';
+
+class ImageSimilaritySearch {
+  private embedder: ImageEmbeddingsModule;
+  private imageEmbeddings: Map<string, Float32Array> = new Map();
+
+  constructor() {
+    this.embedder = new ImageEmbeddingsModule();
+  }
+
+  async initialize() {
+    await this.embedder.load(
+      { modelSource: 'https://example.com/image_embedder.pte' },
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('Image embedder ready!');
+  }
+
+  async addImage(id: string, imagePath: string) {
+    const embedding = await this.embedder.forward(imagePath);
+    this.imageEmbeddings.set(id, embedding);
+    console.log(`Added image ${id}`);
+  }
+
+  async findSimilar(queryImagePath: string, topK: number = 5) {
+    const queryEmbedding = await this.embedder.forward(queryImagePath);
+    
+    // Calculate cosine similarity with all stored embeddings
+    const similarities = Array.from(this.imageEmbeddings.entries()).map(
+      ([id, embedding]) => ({
+        id,
+        similarity: this.cosineSimilarity(queryEmbedding, embedding)
+      })
+    );
+    
+    // Sort by similarity and return top K
+    return similarities
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, topK);
+  }
+
+  private cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  cleanup() {
+    this.embedder.delete();
+    this.imageEmbeddings.clear();
+  }
+}
+
+// Usage
+const search = new ImageSimilaritySearch();
+await search.initialize();
+
+// Index images
+await search.addImage('img1', '/path/to/image1.jpg');
+await search.addImage('img2', '/path/to/image2.jpg');
+await search.addImage('img3', '/path/to/image3.jpg');
+
+// Find similar images
+const similar = await search.findSimilar('/path/to/query.jpg', 3);
+console.log('Most similar images:');
+similar.forEach((result, i) => {
+  console.log(`${i + 1}. ${result.id} (similarity: ${result.similarity.toFixed(3)})`);
+});
+
+search.cleanup();
+```
+
+## Image Clustering Example
+
+```typescript
+class ImageClusterer {
+  private embedder: ImageEmbeddingsModule;
+
+  constructor() {
+    this.embedder = new ImageEmbeddingsModule();
+  }
+
+  async initialize() {
+    await this.embedder.load({
+      modelSource: 'https://example.com/embedder.pte'
+    });
+  }
+
+  async clusterImages(imagePaths: string[], numClusters: number) {
+    // Generate embeddings for all images
+    console.log('Generating embeddings...');
+    const embeddings = await Promise.all(
+      imagePaths.map(path => this.embedder.forward(path))
+    );
+
+    // Simple k-means clustering (simplified)
+    const clusters = this.kMeansClustering(embeddings, numClusters);
+    
+    // Map back to image paths
+    return clusters.map(cluster => 
+      cluster.map(idx => imagePaths[idx])
+    );
+  }
+
+  private kMeansClustering(
+    embeddings: Float32Array[], 
+    k: number
+  ): number[][] {
+    // Simplified k-means implementation
+    // In production, use a proper clustering library
+    // This is just for illustration
+    const assignments = embeddings.map(() => 
+      Math.floor(Math.random() * k)
+    );
+    
+    const clusters: number[][] = Array.from({ length: k }, () => []);
+    assignments.forEach((clusterIdx, imgIdx) => {
+      clusters[clusterIdx].push(imgIdx);
+    });
+    
+    return clusters;
+  }
+
+  cleanup() {
+    this.embedder.delete();
+  }
+}
+
+// Usage
+const clusterer = new ImageClusterer();
+await clusterer.initialize();
+
+const images = [
+  '/path/to/image1.jpg',
+  '/path/to/image2.jpg',
+  '/path/to/image3.jpg',
+  '/path/to/image4.jpg',
+];
+
+const clusters = await clusterer.clusterImages(images, 2);
+console.log('Cluster 1:', clusters[0]);
+console.log('Cluster 2:', clusters[1]);
+
+clusterer.cleanup();
+```
+
+## Batch Processing Example
+
+```typescript
+class BatchImageEmbedder {
+  private embedder: ImageEmbeddingsModule;
+
+  constructor() {
+    this.embedder = new ImageEmbeddingsModule();
+  }
+
+  async initialize() {
+    await this.embedder.load({
+      modelSource: 'https://example.com/embedder.pte'
+    });
+  }
+
+  async processDirectory(directoryPath: string) {
+    const RNFS = require('react-native-fs');
+    const files = await RNFS.readDir(directoryPath);
+    
+    const imageFiles = files.filter(file => 
+      /\.(jpg|jpeg|png)$/i.test(file.name)
+    );
+
+    console.log(`Processing ${imageFiles.length} images...`);
+    const results = [];
+
+    for (const file of imageFiles) {
+      const embedding = await this.embedder.forward(file.path);
+      results.push({
+        path: file.path,
+        name: file.name,
+        embedding: Array.from(embedding) // Convert to regular array for storage
+      });
+      console.log(`Processed ${file.name}`);
+    }
+
+    return results;
+  }
+
+  cleanup() {
+    this.embedder.delete();
+  }
+}
+
+// Usage
+const batchProcessor = new BatchImageEmbedder();
+await batchProcessor.initialize();
+
+const embeddings = await batchProcessor.processDirectory('/path/to/images');
+
+// Save embeddings to file
+const RNFS = require('react-native-fs');
+const outputPath = RNFS.DocumentDirectoryPath + '/embeddings.json';
+await RNFS.writeFile(outputPath, JSON.stringify(embeddings, null, 2));
+
+console.log(`Saved embeddings to ${outputPath}`);
+
+batchProcessor.cleanup();
+```
+
+## Use Cases
+
+- **Image Search**: Find similar images in a collection
+- **Duplicate Detection**: Identify near-duplicate images
+- **Image Clustering**: Group similar images together
+- **Content-Based Retrieval**: Search by visual similarity
+- **Feature Extraction**: Use embeddings as features for ML models
+- **Image Recommendation**: Recommend visually similar items
+
+## Performance Considerations
+
+- Embedding generation is fast (typically < 100ms per image)
+- Store embeddings in a database for large collections
+- Use vector databases (like FAISS) for efficient similarity search at scale
+- Normalize embeddings for cosine similarity calculations
+- Always call `delete()` when done to free memory
+
+## See Also
+
+- [BaseModule](/api/modules/base-module) - Base class with shared functionality
+- [useImageEmbeddings Hook](/api/hooks/use-image-embeddings) - React hook alternative
+- [TextEmbeddingsModule](/api/modules/text-embeddings-module) - For text embeddings
+- [ResourceSource Type](/api/types/resource-source)

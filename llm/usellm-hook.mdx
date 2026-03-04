@@ -1,0 +1,330 @@
+---
+title: useLLM Hook
+description: Complete API reference for the useLLM hook
+---
+
+# useLLM Hook
+
+The `useLLM` hook provides a comprehensive interface for managing Large Language Model instances in React Native.
+
+## Import
+
+```tsx
+import { useLLM } from 'react-native-executorch';
+import { LLAMA3_2_1B } from 'react-native-executorch/constants';
+```
+
+## Parameters
+
+The hook accepts an object of type `LLMProps`:
+
+<ParamField path="model" type="object" required>
+  Model configuration object
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Location of the model binary file (.pte)
+    </ParamField>
+    
+    <ParamField path="tokenizerSource" type="ResourceSource" required>
+      Location of the tokenizer JSON file
+    </ParamField>
+    
+    <ParamField path="tokenizerConfigSource" type="ResourceSource">
+      Location of the tokenizer config JSON file
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading and downloading on mount. Useful when you want to defer loading.
+</ParamField>
+
+### Example
+
+```tsx
+const llm = useLLM({
+  model: LLAMA3_2_1B,
+  preventLoad: false, // Load immediately
+});
+```
+
+## Return Values
+
+The hook returns an object of type `LLMType` with the following properties and methods:
+
+### State Properties
+
+<ResponseField name="messageHistory" type="Message[]">
+  Array containing all messages in the conversation. Updated after the model responds to `sendMessage`.
+  
+  Each message has:
+  - `role`: "user" | "assistant" | "system"
+  - `content`: string
+</ResponseField>
+
+<ResponseField name="response" type="string">
+  The accumulated generated response. Updated with each token during generation.
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  The most recently generated token. Updates in real-time during generation.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the model has finished loading and is ready for inference.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently generating a response.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1. Useful for showing progress indicators during initial model download.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error information if the model failed to load or an error occurred during generation.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="configure" type="function">
+  Configures the LLM's chat behavior, tool calling, and generation parameters.
+  
+  ```tsx
+  configure: (config: LLMConfig) => void
+  ```
+  
+  See [Chat Configuration](/llm/chat-configuration) for details.
+</ResponseField>
+
+<ResponseField name="sendMessage" type="function">
+  Sends a user message and generates a response. Automatically manages conversation history.
+  
+  ```tsx
+  sendMessage: (message: string) => Promise<string>
+  ```
+  
+  **Parameters:**
+  - `message`: The user's message string
+  
+  **Returns:** Promise resolving to the model's complete response
+  
+  **Example:**
+  ```tsx
+  const response = await llm.sendMessage('Hello, how are you?');
+  console.log(response); // "I'm doing well, thank you for asking!"
+  ```
+</ResponseField>
+
+<ResponseField name="generate" type="function">
+  Runs inference on a custom message array. Does not manage conversation context automatically.
+  
+  ```tsx
+  generate: (messages: Message[], tools?: LLMTool[]) => Promise<string>
+  ```
+  
+  **Parameters:**
+  - `messages`: Array of Message objects representing the chat history
+  - `tools`: Optional array of tool definitions for tool calling
+  
+  **Returns:** Promise resolving to the generated text
+  
+  **Example:**
+  ```tsx
+  const messages = [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user', content: 'What is 2+2?' },
+  ];
+  const response = await llm.generate(messages);
+  ```
+</ResponseField>
+
+<ResponseField name="deleteMessage" type="function">
+  Deletes all messages starting from the specified index. Updates `messageHistory`.
+  
+  ```tsx
+  deleteMessage: (index: number) => void
+  ```
+  
+  **Parameters:**
+  - `index`: The index of the message to start deleting from
+  
+  **Example:**
+  ```tsx
+  // Delete the last 2 messages
+  llm.deleteMessage(llm.messageHistory.length - 2);
+  ```
+</ResponseField>
+
+<ResponseField name="interrupt" type="function">
+  Interrupts the current inference generation.
+  
+  ```tsx
+  interrupt: () => void
+  ```
+  
+  **Example:**
+  ```tsx
+  <Button onPress={() => llm.interrupt()} title="Stop" />
+  ```
+</ResponseField>
+
+<ResponseField name="getGeneratedTokenCount" type="function">
+  Returns the number of tokens generated in the current/last generation.
+  
+  ```tsx
+  getGeneratedTokenCount: () => number
+  ```
+</ResponseField>
+
+<ResponseField name="getPromptTokenCount" type="function">
+  Returns the number of tokens in the prompt of the last generation.
+  
+  ```tsx
+  getPromptTokenCount: () => number
+  ```
+</ResponseField>
+
+<ResponseField name="getTotalTokenCount" type="function">
+  Returns the total number of tokens (prompt + generated) from the last generation.
+  
+  ```tsx
+  getTotalTokenCount: () => number
+  ```
+  
+  **Example:**
+  ```tsx
+  useEffect(() => {
+    if (!llm.isGenerating && llm.response) {
+      console.log('Prompt tokens:', llm.getPromptTokenCount());
+      console.log('Generated tokens:', llm.getGeneratedTokenCount());
+      console.log('Total tokens:', llm.getTotalTokenCount());
+    }
+  }, [llm.isGenerating]);
+  ```
+</ResponseField>
+
+## Complete Example
+
+```tsx
+import React, { useEffect, useState } from 'react';
+import { View, Text, TextInput, Button, FlatList } from 'react-native';
+import { useLLM } from 'react-native-executorch';
+import { LLAMA3_2_1B } from 'react-native-executorch/constants';
+
+export default function ChatApp() {
+  const [input, setInput] = useState('');
+  const llm = useLLM({ model: LLAMA3_2_1B });
+
+  useEffect(() => {
+    if (llm.isReady) {
+      llm.configure({
+        chatConfig: {
+          systemPrompt: 'You are a helpful and friendly AI assistant.',
+        },
+        generationConfig: {
+          temperature: 0.7,
+          topp: 0.9,
+        },
+      });
+    }
+  }, [llm.isReady]);
+
+  const handleSend = async () => {
+    if (input.trim() && !llm.isGenerating) {
+      const message = input;
+      setInput('');
+      await llm.sendMessage(message);
+    }
+  };
+
+  if (llm.error) {
+    return <Text>Error: {llm.error.message}</Text>;
+  }
+
+  if (!llm.isReady) {
+    return (
+      <View>
+        <Text>Loading model...</Text>
+        <Text>{Math.round(llm.downloadProgress * 100)}%</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <FlatList
+        data={llm.messageHistory}
+        keyExtractor={(_, idx) => idx.toString()}
+        renderItem={({ item }) => (
+          <View>
+            <Text style={{ fontWeight: 'bold' }}>{item.role}:</Text>
+            <Text>{item.content}</Text>
+          </View>
+        )}
+      />
+      
+      {llm.isGenerating && (
+        <View>
+          <Text style={{ fontWeight: 'bold' }}>Assistant:</Text>
+          <Text>{llm.response}</Text>
+        </View>
+      )}
+      
+      <View style={{ flexDirection: 'row' }}>
+        <TextInput
+          value={input}
+          onChangeText={setInput}
+          placeholder="Type a message..."
+          style={{ flex: 1 }}
+        />
+        <Button
+          title="Send"
+          onPress={handleSend}
+          disabled={llm.isGenerating}
+        />
+      </View>
+    </View>
+  );
+}
+```
+
+## Type Definitions
+
+```typescript
+interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+type ResourceSource = string | { uri: string } | number;
+
+interface LLMProps {
+  model: {
+    modelSource: ResourceSource;
+    tokenizerSource: ResourceSource;
+    tokenizerConfigSource?: ResourceSource;
+  };
+  preventLoad?: boolean;
+}
+
+interface LLMType {
+  messageHistory: Message[];
+  response: string;
+  token: string;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  error: RnExecutorchError | null;
+  configure: (config: LLMConfig) => void;
+  generate: (messages: Message[], tools?: LLMTool[]) => Promise<string>;
+  sendMessage: (message: string) => Promise<string>;
+  deleteMessage: (index: number) => void;
+  interrupt: () => void;
+  getGeneratedTokenCount: () => number;
+  getPromptTokenCount: () => number;
+  getTotalTokenCount: () => number;
+}
+```

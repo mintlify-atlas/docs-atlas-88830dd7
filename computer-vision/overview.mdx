@@ -1,0 +1,204 @@
+---
+title: Computer Vision Overview
+description: Run powerful computer vision models on-device with React Native ExecuTorch
+---
+
+React Native ExecuTorch provides a comprehensive suite of computer vision capabilities that run entirely on-device, enabling privacy-preserving, low-latency visual processing for mobile applications.
+
+## Available Capabilities
+
+<CardGroup cols={2}>
+  <Card title="Classification" icon="image" href="/computer-vision/classification">
+    Categorize images into predefined classes with high accuracy
+  </Card>
+  <Card title="Object Detection" icon="magnifying-glass" href="/computer-vision/object-detection">
+    Detect and localize multiple objects within images or video frames
+  </Card>
+  <Card title="Semantic Segmentation" icon="paintbrush" href="/computer-vision/semantic-segmentation">
+    Classify every pixel in an image for precise scene understanding
+  </Card>
+  <Card title="OCR" icon="text" href="/computer-vision/ocr">
+    Extract text from images with multilingual support
+  </Card>
+  <Card title="Style Transfer" icon="wand-magic-sparkles" href="/computer-vision/style-transfer">
+    Apply artistic styles to images in real-time
+  </Card>
+  <Card title="Image Embeddings" icon="vector-square" href="/computer-vision/image-embeddings">
+    Generate feature vectors for similarity search and clustering
+  </Card>
+  <Card title="Text-to-Image" icon="image-portrait" href="/computer-vision/text-to-image">
+    Generate images from text descriptions using diffusion models
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### On-Device Processing
+All models run locally on the device, ensuring:
+- **Privacy**: No data leaves the device
+- **Low latency**: No network round-trips
+- **Offline support**: Works without internet connectivity
+- **Cost efficiency**: No server-side inference costs
+
+### Optimized Performance
+- Hardware-accelerated inference using CoreML (iOS) and XNNPACK
+- Quantized models for reduced memory footprint
+- Real-time frame processing for camera applications
+- Automatic resource management and cleanup
+
+### Developer-Friendly API
+- React hooks for seamless integration
+- TypeScript support with full type safety
+- Automatic model downloading and caching
+- Progress tracking for model downloads
+- Comprehensive error handling
+
+## Common Patterns
+
+### Basic Usage Pattern
+
+All computer vision hooks follow a consistent pattern:
+
+```tsx
+import { useHookName, MODEL_CONSTANT } from 'react-native-executorch';
+
+function MyComponent() {
+  const { isReady, isGenerating, error, downloadProgress, forward } = useHookName({
+    model: MODEL_CONSTANT,
+  });
+
+  const processImage = async (imageUri: string) => {
+    if (!isReady) return;
+    
+    try {
+      const result = await forward(imageUri);
+      console.log(result);
+    } catch (err) {
+      console.error('Processing failed:', err);
+    }
+  };
+
+  if (error) return <Text>Error: {error.message}</Text>;
+  if (!isReady) return <Text>Loading... {(downloadProgress * 100).toFixed(0)}%</Text>;
+  
+  return <YourUI onProcess={processImage} />;
+}
+```
+
+### Real-Time Camera Processing
+
+For models that support VisionCamera integration:
+
+```tsx
+import { useFrameProcessor } from 'react-native-vision-camera';
+import { useObjectDetection, SSDLITE_320_MOBILENET_V3_LARGE } from 'react-native-executorch';
+
+function CameraView() {
+  const { runOnFrame, isReady } = useObjectDetection({
+    model: SSDLITE_320_MOBILENET_V3_LARGE,
+  });
+
+  const frameProcessor = useFrameProcessor(
+    (frame) => {
+      'worklet';
+      if (!runOnFrame) return;
+      
+      const detections = runOnFrame(frame, 0.7);
+      // Process detections synchronously in worklet
+    },
+    [runOnFrame]
+  );
+
+  return <Camera frameProcessor={frameProcessor} />;
+}
+```
+
+### State Management
+
+All hooks provide consistent state tracking:
+
+- `isReady`: Model is loaded and ready for inference
+- `isGenerating`: Currently processing an input
+- `error`: Error object if loading or inference fails
+- `downloadProgress`: Download progress (0-1) for first-time model loading
+
+## Image Input Formats
+
+Most computer vision models accept images in various formats:
+
+- **File paths**: `file:///path/to/image.jpg`
+- **HTTP URLs**: `https://example.com/image.png`
+- **Base64 strings**: `data:image/jpeg;base64,...`
+- **Asset URIs**: `asset:/image.jpg` (Android)
+- **React Native Image sources**: Resolved URIs from `Image.resolveAssetSource()`
+- **PixelData objects**: Raw RGB pixel buffers for advanced use cases
+
+## Performance Optimization
+
+### Model Selection
+
+Choose models based on your requirements:
+
+- **MobileNet variants**: Faster inference, lower accuracy
+- **ResNet variants**: Higher accuracy, more computational cost
+- **Quantized models**: Reduced memory, minimal accuracy loss
+
+### Memory Management
+
+```tsx
+function Component() {
+  const model = useClassification({
+    model: EFFICIENTNET_V2_S,
+    preventLoad: true, // Delay loading until needed
+  });
+
+  useEffect(() => {
+    // Load when component mounts
+    // Auto-cleanup happens when component unmounts
+  }, []);
+}
+```
+
+### Batch Processing
+
+For multiple images, process sequentially to avoid memory pressure:
+
+```tsx
+const processImages = async (imageUris: string[]) => {
+  const results = [];
+  for (const uri of imageUris) {
+    const result = await forward(uri);
+    results.push(result);
+  }
+  return results;
+};
+```
+
+## Error Handling
+
+All hooks use the `RnExecutorchError` type:
+
+```tsx
+const { error, forward } = useClassification({ model: EFFICIENTNET_V2_S });
+
+try {
+  const result = await forward(imageUri);
+} catch (err) {
+  if (err instanceof RnExecutorchError) {
+    console.log('Error code:', err.code);
+    console.log('Error message:', err.message);
+  }
+}
+```
+
+## Next Steps
+
+Explore specific computer vision capabilities:
+
+- [Classification](/computer-vision/classification) - Categorize images
+- [Object Detection](/computer-vision/object-detection) - Detect objects in images
+- [Semantic Segmentation](/computer-vision/semantic-segmentation) - Pixel-level classification
+- [OCR](/computer-vision/ocr) - Text recognition
+- [Style Transfer](/computer-vision/style-transfer) - Artistic image transformation
+- [Image Embeddings](/computer-vision/image-embeddings) - Feature extraction
+- [Text-to-Image](/computer-vision/text-to-image) - Generate images from text

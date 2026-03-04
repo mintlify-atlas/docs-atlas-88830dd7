@@ -1,0 +1,327 @@
+---
+title: 'Error Handling'
+description: 'Error handling patterns and utilities in React Native ExecuTorch'
+---
+
+## RnExecutorchError
+
+Custom error class for React Native ExecuTorch errors.
+
+### Properties
+
+<ResponseField name="code" type="RnExecutorchErrorCode" required>
+  The error code representing the type of error.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  The message describing the error.
+</ResponseField>
+
+<ResponseField name="cause" type="unknown">
+  The original cause of the error, if any.
+</ResponseField>
+
+### Constructor
+
+```typescript
+constructor(code: number, message: string, cause?: unknown)
+```
+
+**Parameters:**
+- `code` (number) - The error code from `RnExecutorchErrorCode` enum
+- `message` (string) - A descriptive error message
+- `cause` (unknown, optional) - The underlying cause of the error
+
+### Usage Example
+
+```typescript
+import { RnExecutorchError, RnExecutorchErrorCode } from 'react-native-executorch';
+
+try {
+  await llm.generate(messages);
+} catch (error) {
+  if (error instanceof RnExecutorchError) {
+    console.error(`Error ${error.code}: ${error.message}`);
+    
+    switch (error.code) {
+      case RnExecutorchErrorCode.ModuleNotLoaded:
+        console.log('Model is not loaded yet');
+        break;
+      case RnExecutorchErrorCode.ModelGenerating:
+        console.log('Model is currently processing');
+        break;
+      default:
+        console.log('Unknown error occurred');
+    }
+  }
+}
+```
+
+## parseUnknownError
+
+Utility function to parse unknown errors into `RnExecutorchError` instances.
+
+```typescript
+export function parseUnknownError(e: unknown): RnExecutorchError
+```
+
+### Parameters
+
+- `e` (unknown) - The error to parse (can be any type)
+
+### Returns
+
+An `RnExecutorchError` instance representing the error.
+
+### Behavior
+
+The function handles different error types:
+
+1. **Already RnExecutorchError**: Returns as-is
+2. **RnExecutorchError-like object**: Creates new `RnExecutorchError` with code and message
+3. **Standard Error**: Wraps in `RnExecutorchError` with `Internal` code
+4. **String**: Converts to `RnExecutorchError` with `Internal` code
+5. **Other types**: Converts to string and wraps with `Internal` code
+
+### Usage Example
+
+```typescript
+import { parseUnknownError, RnExecutorchErrorCode } from 'react-native-executorch';
+
+try {
+  // Some operation that might throw
+  await someOperation();
+} catch (e) {
+  const error = parseUnknownError(e);
+  
+  if (error.code === RnExecutorchErrorCode.Internal) {
+    console.error('Internal error:', error.message);
+  }
+}
+```
+
+## Error Handling Patterns
+
+### Pattern 1: Check Model State
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+const handleGenerate = async () => {
+  if (!llm.isReady) {
+    console.error('Model is not ready');
+    return;
+  }
+  
+  if (llm.isGenerating) {
+    console.error('Model is already generating');
+    return;
+  }
+  
+  try {
+    const response = await llm.generate(messages);
+    // Handle response
+  } catch (error) {
+    const err = parseUnknownError(error);
+    console.error(`Generation failed: ${err.message}`);
+  }
+};
+```
+
+### Pattern 2: Handle Download Errors
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+useEffect(() => {
+  if (llm.error) {
+    const error = llm.error;
+    
+    if (error.code === RnExecutorchErrorCode.ResourceFetcherDownloadFailed) {
+      console.error('Failed to download model');
+      // Show retry UI
+    } else if (error.code === RnExecutorchErrorCode.InvalidModelSource) {
+      console.error('Invalid model URL');
+      // Show configuration error
+    }
+  }
+}, [llm.error]);
+```
+
+### Pattern 3: Handle Generation Errors
+
+```typescript
+const handleSendMessage = async (message: string) => {
+  try {
+    const response = await llm.sendMessage(message);
+    return response;
+  } catch (error) {
+    const err = parseUnknownError(error);
+    
+    switch (err.code) {
+      case RnExecutorchErrorCode.ModuleNotLoaded:
+        console.error('Model needs to be loaded first');
+        break;
+        
+      case RnExecutorchErrorCode.InvalidUserInput:
+        console.error('Invalid input provided');
+        break;
+        
+      case RnExecutorchErrorCode.TokenizerError:
+        console.error('Tokenization failed');
+        break;
+        
+      default:
+        console.error('Generation failed:', err.message);
+    }
+    
+    throw err;
+  }
+};
+```
+
+### Pattern 4: Handle Vision Model Errors
+
+```typescript
+const objectDetection = useObjectDetection({
+  model: SSDLITE_320_MOBILENET_V3_LARGE,
+});
+
+const detectObjects = async (imageUri: string) => {
+  try {
+    const detections = await objectDetection.forward(imageUri);
+    return detections;
+  } catch (error) {
+    const err = parseUnknownError(error);
+    
+    if (err.code === RnExecutorchErrorCode.FileReadFailed) {
+      console.error('Failed to read image file');
+      // Image path invalid or unsupported format
+    } else if (err.code === RnExecutorchErrorCode.WrongDimensions) {
+      console.error('Image dimensions incompatible with model');
+    } else if (err.code === RnExecutorchErrorCode.InvalidModelOutput) {
+      console.error('Unexpected model output');
+    }
+    
+    throw err;
+  }
+};
+```
+
+### Pattern 5: Handle Speech-to-Text Errors
+
+```typescript
+const stt = useSpeechToText({ model: WHISPER_TINY_EN });
+
+const transcribeAudio = async (waveform: Float32Array) => {
+  try {
+    const result = await stt.transcribe(waveform);
+    return result;
+  } catch (error) {
+    const err = parseUnknownError(error);
+    
+    switch (err.code) {
+      case RnExecutorchErrorCode.LanguageNotSupported:
+        console.error('Language not supported by model');
+        break;
+        
+      case RnExecutorchErrorCode.MultilingualConfiguration:
+        console.error('Language setting conflicts with model type');
+        break;
+        
+      case RnExecutorchErrorCode.StreamingNotStarted:
+        console.error('Streaming transcription not started');
+        break;
+        
+      default:
+        console.error('Transcription failed:', err.message);
+    }
+    
+    throw err;
+  }
+};
+```
+
+## Best Practices
+
+1. **Always check `isReady` before invoking model methods**
+   ```typescript
+   if (model.isReady) {
+     await model.forward(input);
+   }
+   ```
+
+2. **Monitor `error` state in React components**
+   ```typescript
+   useEffect(() => {
+     if (model.error) {
+       handleError(model.error);
+     }
+   }, [model.error]);
+   ```
+
+3. **Use try-catch for async operations**
+   ```typescript
+   try {
+     await model.generate(messages);
+   } catch (error) {
+     const err = parseUnknownError(error);
+     // Handle error
+   }
+   ```
+
+4. **Handle specific error codes for better UX**
+   ```typescript
+   if (error.code === RnExecutorchErrorCode.ResourceFetcherDownloadFailed) {
+     showRetryButton();
+   }
+   ```
+
+5. **Prevent concurrent operations**
+   ```typescript
+   if (model.isGenerating) {
+     return; // Don't start new operation
+   }
+   ```
+
+## Common Error Scenarios
+
+### Model Not Loaded
+
+**Error Code:** `ModuleNotLoaded` (102)
+
+**Cause:** Attempting to use model before it's loaded
+
+**Solution:** Check `isReady` before operations
+
+### Concurrent Operations
+
+**Error Code:** `ModelGenerating` (104)
+
+**Cause:** Starting new operation while model is processing
+
+**Solution:** Check `isGenerating` before operations
+
+### Download Failures
+
+**Error Code:** `ResourceFetcherDownloadFailed` (180)
+
+**Cause:** Network issues, invalid URLs, or storage problems
+
+**Solution:** Verify network, check URLs, ensure storage space
+
+### Invalid Input
+
+**Error Code:** `InvalidUserInput` (117)
+
+**Cause:** Malformed or empty input data
+
+**Solution:** Validate inputs before passing to model
+
+### File Operations
+
+**Error Code:** `FileReadFailed` (114) or `FileWriteFailed` (103)
+
+**Cause:** Invalid paths, permissions, or unsupported formats
+
+**Solution:** Verify file paths and permissions

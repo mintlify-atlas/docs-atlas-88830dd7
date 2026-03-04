@@ -1,0 +1,96 @@
+---
+title: LLM Overview
+description: Run Large Language Models on-device with React Native ExecuTorch
+---
+
+# Large Language Models (LLM)
+
+React Native ExecuTorch enables you to run powerful Large Language Models directly on mobile devices, providing fast, private, and offline AI capabilities.
+
+## What is useLLM?
+
+The `useLLM` hook is the primary interface for integrating LLMs into your React Native application. It handles model loading, token streaming, conversation management, and provides real-time generation feedback.
+
+## Key Features
+
+- **On-Device Inference**: Run models entirely on-device with no server dependency
+- **Token Streaming**: Receive generated tokens in real-time as the model generates responses
+- **Conversation Management**: Built-in message history tracking with flexible context strategies
+- **Tool Calling**: Enable models to call external functions and APIs
+- **Download Progress**: Monitor model download progress for better UX
+- **Multiple Models**: Support for various model families (Llama, Qwen, Hammer, SmolLM, Phi)
+- **Quantization Support**: Use quantized models for reduced memory footprint
+
+## Quick Start
+
+```tsx
+import { useLLM } from 'react-native-executorch';
+import { LLAMA3_2_1B } from 'react-native-executorch/constants';
+
+function ChatScreen() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+
+  useEffect(() => {
+    if (llm.isReady) {
+      llm.configure({
+        chatConfig: {
+          systemPrompt: 'You are a helpful AI assistant.',
+        },
+      });
+    }
+  }, [llm.isReady]);
+
+  const handleSend = async (message: string) => {
+    if (!llm.isGenerating) {
+      await llm.sendMessage(message);
+    }
+  };
+
+  return (
+    <View>
+      {llm.messageHistory.map((msg, idx) => (
+        <Text key={idx}>{msg.role}: {msg.content}</Text>
+      ))}
+      {llm.isGenerating && <Text>Generating: {llm.response}</Text>}
+    </View>
+  );
+}
+```
+
+## Core Concepts
+
+### Model Loading
+
+Models are automatically downloaded and loaded when the hook initializes. You can monitor progress using the `downloadProgress` state (0-1) and check readiness with the `isReady` boolean.
+
+### Message History
+
+The `messageHistory` array tracks the entire conversation, with each message containing a `role` (user, assistant, or system) and `content`.
+
+### Token Streaming
+
+As the model generates text, you receive:
+- `token`: The most recent token generated
+- `response`: The accumulated response string
+- `isGenerating`: Whether generation is in progress
+
+### Error Handling
+
+The `error` state contains any `RnExecutorchError` that occurred during model loading or generation.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="useLLM Hook" icon="code" href="/llm/usellm-hook">
+    Complete API reference for the useLLM hook
+  </Card>
+  <Card title="Chat Configuration" icon="gear" href="/llm/chat-configuration">
+    Configure system prompts, context, and generation
+  </Card>
+  <Card title="Tool Calling" icon="wrench" href="/llm/tool-calling">
+    Enable models to call external functions
+  </Card>
+  <Card title="Available Models" icon="cube" href="/llm/available-models">
+    Browse all supported models and variants
+  </Card>
+</CardGroup>

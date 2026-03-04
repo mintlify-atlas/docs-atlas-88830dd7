@@ -1,0 +1,653 @@
+---
+title: Expo Setup Guide
+description: Complete guide to setting up React Native ExecuTorch in Expo projects
+---
+
+This guide walks you through setting up React Native ExecuTorch in an Expo project, from installation to running your first AI model.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- Node.js 18 or later
+- Expo CLI installed (`npm install -g expo-cli`)
+- iOS 17.0+ or Android 13+ device/emulator
+- At least 4GB of RAM on your device for LLMs
+
+**Important**: React Native ExecuTorch requires the [New Architecture](https://reactnative.dev/architecture/landing-page) and is not compatible with the old architecture.
+
+## Minimum Version Requirements
+
+- iOS: 17.0+
+- Android: API level 13+
+- React Native: 0.81+
+
+## Step 1: Create or Update Expo Project
+
+### Create a New Project
+
+```bash
+npx create-expo-app@latest my-ai-app
+cd my-ai-app
+```
+
+### Update Existing Project
+
+Ensure you're on a compatible Expo SDK version:
+
+```bash
+cd your-expo-project
+npx expo install expo@latest
+```
+
+## Step 2: Install Dependencies
+
+Install React Native ExecuTorch and Expo resource fetcher:
+
+```bash
+yarn add react-native-executorch
+yarn add @react-native-executorch/expo-resource-fetcher
+yarn add expo-file-system expo-asset
+```
+
+Or with npm:
+
+```bash
+npm install react-native-executorch
+npm install @react-native-executorch/expo-resource-fetcher
+npm install expo-file-system expo-asset
+```
+
+## Step 3: Initialize Resource Fetcher
+
+Create or update your app's entry point to initialize the ExpoResourceFetcher.
+
+### For Expo Router Projects
+
+Create or update `app/_layout.tsx`:
+
+```typescript
+import { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+export default function RootLayout() {
+  useEffect(() => {
+    // Initialize resource fetcher once at app startup
+    initExecutorch({
+      resourceFetcher: ExpoResourceFetcher,
+    });
+  }, []);
+
+  return (
+    <Stack>
+      <Stack.Screen name="index" />
+    </Stack>
+  );
+}
+```
+
+### For Standard Expo Projects
+
+Update `App.tsx` or `App.js`:
+
+```typescript
+import { useEffect } from 'react';
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+export default function App() {
+  useEffect(() => {
+    initExecutorch({
+      resourceFetcher: ExpoResourceFetcher,
+    });
+  }, []);
+
+  return (
+    // Your app content
+  );
+}
+```
+
+## Step 4: Configure for New Architecture
+
+React Native ExecuTorch requires the New Architecture. Update your `app.json`:
+
+```json
+{
+  "expo": {
+    "name": "my-ai-app",
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "newArchEnabled": true
+          },
+          "android": {
+            "newArchEnabled": true
+          }
+        }
+      ]
+    ]
+  }
+}
+```
+
+Install the build properties plugin if not already installed:
+
+```bash
+npx expo install expo-build-properties
+```
+
+## Step 5: Run Your First Model
+
+Create a simple component to test model loading:
+
+```typescript
+import { useState } from 'react';
+import { View, Text, Button, StyleSheet } from 'react-native';
+import { useLLM, LLAMA3_2_1B, Message } from 'react-native-executorch';
+
+export default function ChatScreen() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'system', content: 'You are a helpful assistant' },
+  ]);
+
+  const handleSendMessage = async () => {
+    const userMessage = 'What is React Native?';
+    const updatedMessages = [
+      ...messages,
+      { role: 'user', content: userMessage },
+    ];
+    setMessages(updatedMessages);
+
+    try {
+      await llm.generate(updatedMessages);
+      console.log('Response:', llm.response);
+    } catch (error) {
+      console.error('Generation error:', error);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>React Native ExecuTorch Demo</Text>
+      
+      {!llm.isReady && (
+        <Text>Loading model... {Math.round(llm.downloadProgress * 100)}%</Text>
+      )}
+      
+      {llm.error && (
+        <Text style={styles.error}>Error: {llm.error.message}</Text>
+      )}
+      
+      {llm.isReady && (
+        <>
+          <Text style={styles.status}>Model ready!</Text>
+          <Button
+            title={llm.isGenerating ? 'Generating...' : 'Ask Question'}
+            onPress={handleSendMessage}
+            disabled={llm.isGenerating}
+          />
+        </>
+      )}
+      
+      {llm.response && (
+        <View style={styles.responseContainer}>
+          <Text style={styles.responseLabel}>Response:</Text>
+          <Text>{llm.response}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  status: {
+    marginBottom: 10,
+    color: 'green',
+  },
+  error: {
+    color: 'red',
+    marginBottom: 10,
+  },
+  responseContainer: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  responseLabel: {
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+});
+```
+
+## Step 6: Build and Run
+
+### iOS
+
+```bash
+npx expo run:ios
+```
+
+This will:
+1. Install CocoaPods dependencies
+2. Build the native iOS app
+3. Launch on a connected device or simulator
+
+**Note**: iOS Simulator may not reflect real device performance. Test on physical devices for accurate results.
+
+### Android
+
+```bash
+npx expo run:android
+```
+
+This will:
+1. Install Gradle dependencies
+2. Build the native Android app
+3. Launch on a connected device or emulator
+
+**Important**: For LLM models, increase emulator RAM to 4GB+ in AVD Manager.
+
+## Using ExpoResourceFetcher Features
+
+### Loading Models from Different Sources
+
+```typescript
+import { useLLM } from 'react-native-executorch';
+
+// 1. From remote URL
+const llm1 = useLLM({
+  model: {
+    modelSource: 'https://huggingface.co/your-model/model.pte',
+    tokenizerSource: 'https://huggingface.co/your-model/tokenizer.bin',
+    tokenizerConfigSource: 'https://huggingface.co/your-model/tokenizer_config.json',
+  },
+});
+
+// 2. From local assets (files < 512MB)
+const llm2 = useLLM({
+  model: {
+    modelSource: require('./assets/model.pte'),
+    tokenizerSource: require('./assets/tokenizer.bin'),
+    tokenizerConfigSource: require('./assets/tokenizer_config.json'),
+  },
+});
+
+// 3. From local filesystem
+const llm3 = useLLM({
+  model: {
+    modelSource: 'file:///path/to/model.pte',
+    tokenizerSource: 'file:///path/to/tokenizer.bin',
+    tokenizerConfigSource: 'file:///path/to/tokenizer_config.json',
+  },
+});
+```
+
+### Managing Downloads
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// Download with progress tracking
+const downloadModel = async () => {
+  const modelUrl = 'https://example.com/model.pte';
+  
+  try {
+    const paths = await ExpoResourceFetcher.fetch(
+      (progress) => {
+        console.log(`Download progress: ${Math.round(progress * 100)}%`);
+      },
+      modelUrl
+    );
+    console.log('Downloaded to:', paths);
+  } catch (error) {
+    console.error('Download failed:', error);
+  }
+};
+
+// Pause download
+await ExpoResourceFetcher.pauseFetching(modelUrl);
+
+// Resume download
+await ExpoResourceFetcher.resumeFetching(modelUrl);
+
+// Cancel download
+await ExpoResourceFetcher.cancelFetching(modelUrl);
+```
+
+### Managing Storage
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// List all downloaded files
+const files = await ExpoResourceFetcher.listDownloadedFiles();
+console.log('Downloaded files:', files);
+
+// List only model files (.pte)
+const models = await ExpoResourceFetcher.listDownloadedModels();
+console.log('Model files:', models);
+
+// Check total size
+const totalSize = await ExpoResourceFetcher.getFilesTotalSize(
+  'https://model1.pte',
+  'https://model2.pte'
+);
+console.log(`Total size: ${totalSize / 1024 / 1024} MB`);
+
+// Delete unused models
+await ExpoResourceFetcher.deleteResources(
+  'https://old-model.pte'
+);
+```
+
+## Working with Expo Assets
+
+For small models (< 512MB), use Expo's asset system:
+
+### Configure app.json
+
+```json
+{
+  "expo": {
+    "assetBundlePatterns": [
+      "assets/**/*"
+    ]
+  }
+}
+```
+
+### Load Assets
+
+```typescript
+import { useClassification, EFFICIENTNET_V2_S } from 'react-native-executorch';
+
+const classifier = useClassification({
+  model: {
+    modelSource: require('./assets/model.pte'),
+  },
+});
+```
+
+## Common Expo Configuration
+
+### Increase Memory Limit (Android)
+
+For Android builds, you may need to increase heap size. Create or update `android/gradle.properties`:
+
+```properties
+org.gradle.jvmargs=-Xmx4096m -XX:MaxPermSize=512m -XX:+HeapDumpOnOutOfMemoryError
+```
+
+### Configure Permissions
+
+Update `app.json` if your app needs specific permissions:
+
+```json
+{
+  "expo": {
+    "ios": {
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app uses the microphone for speech-to-text."
+      }
+    },
+    "android": {
+      "permissions": [
+        "RECORD_AUDIO"
+      ]
+    }
+  }
+}
+```
+
+## File Storage Location
+
+ExpoResourceFetcher stores files in:
+
+- **iOS**: `{DocumentDirectory}/react-native-executorch/`
+- **Android**: `{DocumentDirectory}/react-native-executorch/`
+
+Files persist across app restarts but are deleted when the app is uninstalled.
+
+## Troubleshooting
+
+### Resource Fetcher Not Initialized
+
+Error: `ResourceFetcherAdapterNotInitialized`
+
+**Solution**: Ensure `initExecutorch()` is called before using any hooks:
+
+```typescript
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+initExecutorch({
+  resourceFetcher: ExpoResourceFetcher,
+});
+```
+
+### New Architecture Not Enabled
+
+If you see architecture-related errors, verify `app.json` configuration and rebuild:
+
+```bash
+npx expo prebuild --clean
+npx expo run:ios  # or run:android
+```
+
+### Download Failures
+
+If downloads fail:
+1. Check network connectivity
+2. Verify URL is accessible
+3. Check available storage space
+4. Try with a smaller model first
+
+### Model Not Loading
+
+1. Check download progress: `llm.downloadProgress`
+2. Check for errors: `llm.error`
+3. Verify model file is valid `.pte` format
+4. Check device has sufficient RAM (see [Memory Management](/advanced/memory-management))
+
+## Example: Complete Chat App
+
+Here's a complete example of a chat app with Expo:
+
+```typescript
+import { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { useLLM, LLAMA3_2_1B, Message } from 'react-native-executorch';
+
+export default function ChatApp() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+  const [input, setInput] = useState('');
+  const [displayMessages, setDisplayMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    if (llm.messageHistory.length > 0) {
+      setDisplayMessages(llm.messageHistory);
+    }
+  }, [llm.messageHistory]);
+
+  const handleSend = async () => {
+    if (!input.trim() || !llm.isReady || llm.isGenerating) return;
+
+    const userMessage = input;
+    setInput('');
+
+    // Optimistically show user message
+    setDisplayMessages(prev => [
+      ...prev,
+      { role: 'user', content: userMessage },
+    ]);
+
+    try {
+      await llm.sendMessage(userMessage);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={100}
+    >
+      <View style={styles.header}>
+        <Text style={styles.title}>AI Chat</Text>
+        {!llm.isReady && (
+          <Text style={styles.status}>
+            Loading... {Math.round(llm.downloadProgress * 100)}%
+          </Text>
+        )}
+      </View>
+
+      <FlatList
+        data={displayMessages}
+        keyExtractor={(_, index) => index.toString()}
+        renderItem={({ item }) => (
+          <View
+            style={[
+              styles.message,
+              item.role === 'user' ? styles.userMessage : styles.aiMessage,
+            ]}
+          >
+            <Text style={styles.messageRole}>
+              {item.role === 'user' ? 'You' : 'AI'}
+            </Text>
+            <Text>{item.content}</Text>
+          </View>
+        )}
+        contentContainerStyle={styles.messageList}
+      />
+
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          value={input}
+          onChangeText={setInput}
+          placeholder="Type a message..."
+          editable={llm.isReady && !llm.isGenerating}
+        />
+        <TouchableOpacity
+          style={[
+            styles.sendButton,
+            (!llm.isReady || llm.isGenerating) && styles.sendButtonDisabled,
+          ]}
+          onPress={handleSend}
+          disabled={!llm.isReady || llm.isGenerating}
+        >
+          <Text style={styles.sendButtonText}>
+            {llm.isGenerating ? '...' : 'Send'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  header: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  status: {
+    marginTop: 5,
+    color: '#666',
+  },
+  messageList: {
+    padding: 10,
+  },
+  message: {
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 4,
+    maxWidth: '80%',
+  },
+  userMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#007AFF',
+  },
+  aiMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e0e0e0',
+  },
+  messageRole: {
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    marginRight: 10,
+  },
+  sendButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+});
+```
+
+## Next Steps
+
+- Explore [available models](https://huggingface.co/software-mansion) on HuggingFace
+- Learn about [Performance Optimization](/advanced/performance-optimization)
+- Understand [Memory Management](/advanced/memory-management)
+- Check the [Troubleshooting Guide](/guides/troubleshooting)
+- Learn about [Custom Models](/advanced/custom-models)

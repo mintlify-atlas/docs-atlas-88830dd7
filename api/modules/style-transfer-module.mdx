@@ -1,0 +1,345 @@
+---
+title: 'StyleTransferModule'
+description: 'Class-based API for neural style transfer tasks'
+icon: 'palette'
+---
+
+## Overview
+
+`StyleTransferModule` provides a class-based interface for neural style transfer tasks. It applies artistic styles to images, transforming photos into artworks.
+
+## When to Use
+
+**Use `StyleTransferModule` when:**
+- You need manual control over model lifecycle
+- You're working outside React components
+- You need multiple style transfer instances
+- You want to integrate style transfer into non-React code
+
+**Use `useStyleTransfer` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Extends
+
+`StyleTransferModule` extends [BaseModule](/api/modules/base-module), inheriting core functionality like `generateFromFrame()` for real-time camera frame processing.
+
+## Constructor
+
+```typescript
+new StyleTransferModule()
+```
+
+Creates a new style transfer module instance.
+
+### Example
+
+```typescript
+import { StyleTransferModule } from 'react-native-executorch';
+
+const styleTransfer = new StyleTransferModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  model: { modelSource: ResourceSource },
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the style transfer model from the specified source.
+
+#### Parameters
+
+<ParamField path="model.modelSource" type="ResourceSource" required>
+  Resource location of the model binary. Each model is typically trained on a specific artistic style.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await styleTransfer.load(
+  { modelSource: 'https://example.com/mosaic_style.pte' },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### forward()
+
+```typescript
+async forward(imageSource: string): Promise<string>
+```
+
+Executes the model's forward pass, applying the style to the provided image.
+
+#### Parameters
+
+<ParamField path="imageSource" type="string" required>
+  The image source to process. Can be:
+  - A file path (e.g., `'/path/to/image.jpg'`)
+  - A URI (e.g., `'file:///path/to/image.jpg'` or `'https://example.com/image.jpg'`)
+  - A Base64-encoded string
+</ParamField>
+
+#### Returns
+
+The stylized image as a Base64-encoded string.
+
+#### Example
+
+```typescript
+const styledImageBase64 = await styleTransfer.forward('file:///path/to/photo.jpg');
+
+// Use in an Image component
+<Image source={{ uri: `data:image/jpeg;base64,${styledImageBase64}` }} />
+
+// Or save to file
+import RNFS from 'react-native-fs';
+const outputPath = RNFS.DocumentDirectoryPath + '/styled_image.jpg';
+await RNFS.writeFile(outputPath, styledImageBase64, 'base64');
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory and releases native resources. Always call this when done to prevent memory leaks.
+
+#### Example
+
+```typescript
+styleTransfer.delete();
+```
+
+### generateFromFrame()
+
+```typescript
+generateFromFrame(frameData: Frame, ...args: any[]): string
+```
+
+Inherited from [BaseModule](/api/modules/base-module). Process a camera frame directly for real-time style transfer.
+
+This method is worklet-compatible and can be called from VisionCamera's frame processor thread, enabling live style transfer effects.
+
+#### Parameters
+
+<ParamField path="frameData" type="Frame" required>
+  Frame data object with either `nativeBuffer` (zero-copy) or `data` (ArrayBuffer).
+</ParamField>
+
+#### Returns
+
+The stylized frame as a Base64-encoded string.
+
+#### Example
+
+```typescript
+import { useFrameOutput } from 'react-native-vision-camera';
+
+const frameOutput = useFrameOutput({
+  pixelFormat: 'rgb',
+  onFrame(frame) {
+    'worklet';
+    const nativeBuffer = frame.getNativeBuffer();
+    const styledImage = styleTransfer.generateFromFrame({
+      nativeBuffer: nativeBuffer.pointer,
+      width: frame.width,
+      height: frame.height
+    });
+    nativeBuffer.release();
+    frame.dispose();
+    
+    // Use styledImage...
+  }
+});
+```
+
+## Complete Example
+
+```typescript
+import { StyleTransferModule } from 'react-native-executorch';
+import RNFS from 'react-native-fs';
+
+class ArtisticStyleProcessor {
+  private model: StyleTransferModule;
+  private styleName: string;
+
+  constructor(styleName: string) {
+    this.model = new StyleTransferModule();
+    this.styleName = styleName;
+  }
+
+  async initialize(modelUrl: string) {
+    console.log(`Loading ${this.styleName} style...`);
+    await this.model.load(
+      { modelSource: modelUrl },
+      (progress) => {
+        console.log(`Download: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('Style transfer ready!');
+  }
+
+  async applyStyle(inputPath: string, outputPath: string) {
+    console.log(`Applying ${this.styleName} style...`);
+    const styledImageBase64 = await this.model.forward(inputPath);
+    
+    // Save to file
+    await RNFS.writeFile(outputPath, styledImageBase64, 'base64');
+    console.log(`Styled image saved to ${outputPath}`);
+    
+    return outputPath;
+  }
+
+  cleanup() {
+    this.model.delete();
+  }
+}
+
+// Usage
+const mosaicStyle = new ArtisticStyleProcessor('Mosaic');
+await mosaicStyle.initialize('https://example.com/mosaic_style.pte');
+
+const inputImage = '/path/to/photo.jpg';
+const outputImage = RNFS.DocumentDirectoryPath + '/mosaic_photo.jpg';
+
+await mosaicStyle.applyStyle(inputImage, outputImage);
+
+mosaicStyle.cleanup();
+```
+
+## Multiple Styles Example
+
+```typescript
+class MultiStyleProcessor {
+  private styles: Map<string, StyleTransferModule> = new Map();
+
+  async loadStyle(name: string, modelSource: string) {
+    const model = new StyleTransferModule();
+    await model.load({ modelSource });
+    this.styles.set(name, model);
+    console.log(`Loaded style: ${name}`);
+  }
+
+  async applyStyle(styleName: string, imageSource: string): Promise<string> {
+    const model = this.styles.get(styleName);
+    if (!model) {
+      throw new Error(`Style "${styleName}" not loaded`);
+    }
+    return await model.forward(imageSource);
+  }
+
+  cleanupAll() {
+    this.styles.forEach(model => model.delete());
+    this.styles.clear();
+  }
+}
+
+// Usage
+const processor = new MultiStyleProcessor();
+
+// Load multiple styles
+await processor.loadStyle('mosaic', 'https://example.com/mosaic.pte');
+await processor.loadStyle('candy', 'https://example.com/candy.pte');
+await processor.loadStyle('udnie', 'https://example.com/udnie.pte');
+
+// Apply different styles
+const photo = 'file:///path/to/photo.jpg';
+const mosaicResult = await processor.applyStyle('mosaic', photo);
+const candyResult = await processor.applyStyle('candy', photo);
+const udnieResult = await processor.applyStyle('udnie', photo);
+
+processor.cleanupAll();
+```
+
+## Real-time Camera Style Transfer
+
+```typescript
+import { Camera, useFrameOutput } from 'react-native-vision-camera';
+import { useState } from 'react';
+
+function LiveStyleTransferCamera() {
+  const [styledImage, setStyledImage] = useState<string | null>(null);
+  const styleTransfer = useRef(new StyleTransferModule()).current;
+
+  useEffect(() => {
+    // Load model
+    styleTransfer.load({ modelSource: 'https://example.com/style.pte' });
+    
+    return () => {
+      styleTransfer.delete();
+    };
+  }, []);
+
+  const frameOutput = useFrameOutput({
+    pixelFormat: 'rgb',
+    onFrame(frame) {
+      'worklet';
+      const nativeBuffer = frame.getNativeBuffer();
+      const result = styleTransfer.generateFromFrame({
+        nativeBuffer: nativeBuffer.pointer,
+        width: frame.width,
+        height: frame.height
+      });
+      nativeBuffer.release();
+      frame.dispose();
+      
+      runOnJS(setStyledImage)(result);
+    }
+  });
+
+  return (
+    <View>
+      <Camera frameOutput={frameOutput} />
+      {styledImage && (
+        <Image 
+          source={{ uri: `data:image/jpeg;base64,${styledImage}` }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+    </View>
+  );
+}
+```
+
+## Common Style Transfer Models
+
+Popular pre-trained styles you can use:
+
+- **Mosaic** - Colorful mosaic tile effect
+- **Candy** - Bright, candy-like colors
+- **Udnie** - Geometric abstract style
+- **Rain Princess** - Impressionist rainy scene
+- **The Scream** - Edvard Munch's expressionist style
+- **Starry Night** - Van Gogh's swirling sky style
+
+Each style requires a separate model file trained on that specific artwork.
+
+## Performance Considerations
+
+- Style transfer is computationally intensive
+- Processing time depends on input image size
+- Consider downscaling large images before processing
+- For real-time camera use, expect some latency
+- Always call `delete()` to free GPU/memory resources
+
+## See Also
+
+- [BaseModule](/api/modules/base-module) - Base class with shared functionality
+- [useStyleTransfer Hook](/api/hooks/use-style-transfer) - React hook alternative
+- [Frame Type](/api/types/frame)
+- [ResourceSource Type](/api/types/resource-source)

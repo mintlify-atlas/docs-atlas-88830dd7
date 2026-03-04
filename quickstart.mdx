@@ -1,80 +1,490 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Build your first AI-powered feature with React Native ExecuTorch in minutes
 ---
 
-## Get started in three steps
+This guide walks you through creating a simple chat application using the `useLLM` hook with the Llama 3.2 1B model.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before starting, make sure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- Completed the [installation](/installation) steps
+- Initialized ExecuTorch with a resource fetcher
+- A React Native project with the New Architecture enabled
 
-### Step 2: Deploy your changes
+## Step 1: Initialize ExecuTorch
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+First, initialize ExecuTorch in your app's entry point (e.g., `App.tsx`, `_layout.tsx`, or `index.tsx`):
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<CodeGroup>
+```tsx Expo (_layout.tsx)
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+initExecutorch({
+  resourceFetcher: ExpoResourceFetcher,
+});
 
-### Step 3: Go live
+export default function Layout() {
+  // Your app layout
+}
+```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```tsx Bare React Native (App.tsx)
+import { initExecutorch } from 'react-native-executorch';
+import { BareResourceFetcher } from '@react-native-executorch/bare-resource-fetcher';
 
-## Next steps
+initExecutorch({
+  resourceFetcher: BareResourceFetcher,
+});
 
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+export default function App() {
+  // Your app component
+}
+```
+</CodeGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Call `initExecutorch()` **once** at the top level of your app, before rendering any components that use AI models.
 </Note>
+
+## Step 2: Create a Chat Component
+
+Create a new component that uses the `useLLM` hook to interact with an LLM:
+
+```tsx ChatScreen.tsx
+import { useState } from 'react';
+import {
+  View,
+  TextInput,
+  TouchableOpacity,
+  Text,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import {
+  useLLM,
+  LLAMA3_2_1B,
+  Message,
+} from 'react-native-executorch';
+
+export default function ChatScreen() {
+  const [userInput, setUserInput] = useState('');
+  
+  // Initialize the LLM with Llama 3.2 1B model
+  const llm = useLLM({ model: LLAMA3_2_1B });
+
+  const sendMessage = async () => {
+    if (!userInput.trim()) return;
+    
+    const message = userInput;
+    setUserInput(''); // Clear input
+    
+    try {
+      // Send message and get response
+      await llm.sendMessage(message);
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
+  };
+
+  // Show loading indicator while model is downloading/loading
+  if (!llm.isReady) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+        <Text style={styles.loadingText}>
+          Loading model... {(llm.downloadProgress * 100).toFixed(0)}%
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Chat messages */}
+      <FlatList
+        data={llm.messageHistory}
+        keyExtractor={(_, index) => index.toString()}
+        renderItem={({ item }) => (
+          <View
+            style={[
+              styles.messageBubble,
+              item.role === 'user' ? styles.userMessage : styles.assistantMessage,
+            ]}
+          >
+            <Text style={styles.roleText}>{item.role}</Text>
+            <Text style={styles.messageText}>{item.content}</Text>
+          </View>
+        )}
+        ListFooterComponent={
+          llm.isGenerating ? (
+            <View style={styles.messageBubble}>
+              <Text style={styles.roleText}>assistant</Text>
+              <Text style={styles.messageText}>{llm.response}</Text>
+            </View>
+          ) : null
+        }
+      />
+
+      {/* Input area */}
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.input}
+          value={userInput}
+          onChangeText={setUserInput}
+          placeholder="Type your message..."
+          multiline
+          editable={!llm.isGenerating}
+        />
+        <TouchableOpacity
+          style={[
+            styles.sendButton,
+            (!userInput.trim() || llm.isGenerating) && styles.sendButtonDisabled,
+          ]}
+          onPress={sendMessage}
+          disabled={!userInput.trim() || llm.isGenerating}
+        >
+          <Text style={styles.sendButtonText}>
+            {llm.isGenerating ? '...' : 'Send'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  messageBubble: {
+    padding: 12,
+    marginVertical: 4,
+    marginHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+  },
+  userMessage: {
+    backgroundColor: '#007AFF',
+    alignSelf: 'flex-end',
+  },
+  assistantMessage: {
+    backgroundColor: '#E9E9EB',
+    alignSelf: 'flex-start',
+  },
+  roleText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    color: '#666',
+  },
+  messageText: {
+    fontSize: 16,
+    color: '#000',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    marginRight: 8,
+    maxHeight: 100,
+  },
+  sendButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    padding: 12,
+    justifyContent: 'center',
+    minWidth: 60,
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+});
+```
+
+## Step 3: Understanding the Code
+
+Let's break down the key parts of the implementation:
+
+### Model Initialization
+
+```tsx
+const llm = useLLM({ model: LLAMA3_2_1B });
+```
+
+The `useLLM` hook:
+- Automatically downloads the model on first use
+- Loads the model into memory
+- Returns an interface to interact with the LLM
+
+### Available Model Constants
+
+React Native ExecuTorch provides pre-configured model constants:
+
+<CodeGroup>
+```tsx Llama 3.2
+import {
+  LLAMA3_2_1B,           // 1B parameters
+  LLAMA3_2_1B_QLORA,     // 1B QLoRA variant
+  LLAMA3_2_1B_SPINQUANT, // 1B SpinQuant (smaller, faster)
+  LLAMA3_2_3B,           // 3B parameters
+  LLAMA3_2_3B_QLORA,     // 3B QLoRA variant
+  LLAMA3_2_3B_SPINQUANT, // 3B SpinQuant
+} from 'react-native-executorch';
+```
+
+```tsx Other LLMs
+import {
+  QWEN3_0_6B,
+  QWEN2_5_1_5B,
+  SMOLLM2_1_360M,
+  HAMMER2_1_1_5B,
+  PHI_4_MINI_4B,
+} from 'react-native-executorch';
+```
+</CodeGroup>
+
+### State Properties
+
+The `useLLM` hook returns several useful properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `isReady` | `boolean` | `true` when model is loaded and ready |
+| `isGenerating` | `boolean` | `true` while model is generating a response |
+| `downloadProgress` | `number` | Download progress (0 to 1) |
+| `messageHistory` | `Message[]` | Array of all conversation messages |
+| `response` | `string` | Current response being generated |
+| `token` | `string` | Most recently generated token |
+| `error` | `RnExecutorchError \| null` | Error if model failed to load |
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `sendMessage(message)` | Add user message and get AI response |
+| `generate(messages, tools?)` | Generate completion for message array |
+| `interrupt()` | Stop current generation |
+| `deleteMessage(index)` | Remove message from history |
+| `configure(config)` | Update model configuration |
+| `getGeneratedTokenCount()` | Get count of generated tokens |
+| `getPromptTokenCount()` | Get count of prompt tokens |
+| `getTotalTokenCount()` | Get total token count |
+
+## Step 4: Advanced Usage
+
+### Using `generate()` for One-Off Completions
+
+If you don't need conversation history management, use `generate()`:
+
+```tsx
+const chat: Message[] = [
+  { role: 'system', content: 'You are a helpful assistant' },
+  { role: 'user', content: 'What is the capital of France?' },
+];
+
+const response = await llm.generate(chat);
+console.log('Response:', response);
+```
+
+### Configuring the Model
+
+Customize the model's behavior with `configure()`:
+
+```tsx
+import { useLLM, LLAMA3_2_1B } from 'react-native-executorch';
+
+function MyComponent() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+
+  useEffect(() => {
+    if (llm.isReady) {
+      llm.configure({
+        chatConfig: {
+          systemPrompt: 'You are a helpful coding assistant',
+          initialMessageHistory: [],
+        },
+        generationConfig: {
+          temperature: 0.7,  // Control randomness (0-1)
+          topp: 0.9,         // Nucleus sampling
+          outputTokenBatchSize: 3,
+          batchTimeInterval: 50,
+        },
+      });
+    }
+  }, [llm.isReady]);
+
+  // ...
+}
+```
+
+### Handling Errors
+
+```tsx
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+useEffect(() => {
+  if (llm.error) {
+    console.error('LLM Error:', llm.error.message);
+    console.error('Error Code:', llm.error.code);
+  }
+}, [llm.error]);
+```
+
+### Interrupting Generation
+
+```tsx
+<TouchableOpacity
+  onPress={llm.interrupt}
+  disabled={!llm.isGenerating}
+>
+  <Text>Stop Generation</Text>
+</TouchableOpacity>
+```
+
+## Step 5: Testing Your App
+
+<Steps>
+  <Step title="Run the app">
+    ```bash
+    # Expo
+    npx expo run:ios
+    # or
+    npx expo run:android
+
+    # Bare React Native
+    npx react-native run-ios
+    # or
+    npx react-native run-android
+    ```
+  </Step>
+
+  <Step title="Wait for model download">
+    On first launch, the model will be downloaded. This may take a few minutes depending on your connection.
+  </Step>
+
+  <Step title="Send a message">
+    Type a message in the input field and press Send. The model will generate a response!
+  </Step>
+</Steps>
+
+<Warning>
+  **High RAM Usage**: Running LLMs requires significant memory. If your app crashes unexpectedly, try:
+  - Using a smaller model (e.g., `LLAMA3_2_1B_SPINQUANT` instead of `LLAMA3_2_3B`)
+  - Increasing emulator RAM allocation
+  - Testing on a physical device with more memory
+</Warning>
+
+## Performance Tips
+
+<Tabs>
+  <Tab title="Model Selection">
+    Choose the right model for your use case:
+
+    - **SpinQuant variants**: Smallest size, fastest inference, good quality
+    - **QLoRA variants**: Balanced size and quality
+    - **Original models**: Highest quality, largest size
+
+    Start with `LLAMA3_2_1B_SPINQUANT` for best performance.
+  </Tab>
+
+  <Tab title="Memory Management">
+    - Only load one model at a time
+    - Use `preventLoad: true` if you want to defer loading
+    - Clean up models when switching screens
+  </Tab>
+
+  <Tab title="Optimization">
+    - Adjust `outputTokenBatchSize` to control response streaming speed
+    - Use `temperature: 0` for deterministic outputs
+    - Implement context strategies to manage conversation length
+  </Tab>
+</Tabs>
+
+## Type Definitions
+
+For TypeScript users, here are the key type definitions:
+
+```tsx
+interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+interface LLMType {
+  messageHistory: Message[];
+  response: string;
+  token: string;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  error: RnExecutorchError | null;
+  configure: (config: LLMConfig) => void;
+  generate: (messages: Message[], tools?: LLMTool[]) => Promise<string>;
+  sendMessage: (message: string) => Promise<string>;
+  deleteMessage: (index: number) => void;
+  interrupt: () => void;
+  getGeneratedTokenCount: () => number;
+  getPromptTokenCount: () => number;
+  getTotalTokenCount: () => number;
+}
+```
+
+## Next Steps
+
+Congratulations! You've built your first AI-powered chat application.
+
+<CardGroup cols={2}>
+  <Card
+    title="Explore Other Models"
+    icon="brain"
+  >
+    Try computer vision, speech-to-text, and other AI capabilities
+  </Card>
+  <Card
+    title="Advanced Configuration"
+    icon="gear"
+  >
+    Learn about context strategies, tool calling, and structured outputs
+  </Card>
+  <Card
+    title="View Demo Apps"
+    icon="code"
+    href="https://github.com/software-mansion/react-native-executorch/tree/main/apps"
+  >
+    Explore full-featured example applications
+  </Card>
+  <Card
+    title="API Reference"
+    icon="book"
+  >
+    Dive deep into all available hooks and modules
+  </Card>
+</CardGroup>

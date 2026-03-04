@@ -1,0 +1,474 @@
+---
+title: 'TextToSpeechModule'
+description: 'Class-based API for text-to-speech synthesis'
+icon: 'volume'
+---
+
+## Overview
+
+`TextToSpeechModule` provides a class-based interface for Text-to-Speech (TTS) functionalities. It supports single-shot synthesis and streaming audio generation with models like Kokoro.
+
+## When to Use
+
+**Use `TextToSpeechModule` when:**
+- You need manual control over TTS lifecycle
+- You're working outside React components
+- You need streaming audio generation
+- You want to integrate speech synthesis into non-React code
+
+**Use `useTextToSpeech` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Constructor
+
+```typescript
+new TextToSpeechModule()
+```
+
+Creates a new text-to-speech module instance.
+
+### Example
+
+```typescript
+import { TextToSpeechModule } from 'react-native-executorch';
+
+const tts = new TextToSpeechModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  config: TextToSpeechConfig,
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the TTS model and voice assets.
+
+#### Parameters
+
+<ParamField path="config" type="TextToSpeechConfig" required>
+  Configuration object containing:
+  - `model`: Model configuration (e.g., `{ type: 'kokoro', durationPredictorSource, synthesizerSource }`)
+  - `voice`: Voice configuration including language and voice data sources
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await tts.load(
+  {
+    model: {
+      type: 'kokoro',
+      durationPredictorSource: 'https://example.com/duration.pte',
+      synthesizerSource: 'https://example.com/synthesizer.pte'
+    },
+    voice: {
+      lang: 'en',
+      voiceSource: 'https://example.com/voice_en.bin',
+      extra: {
+        taggerSource: 'https://example.com/tagger.bin',
+        lexiconSource: 'https://example.com/lexicon.txt'
+      }
+    }
+  },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### forward()
+
+```typescript
+async forward(
+  text: string,
+  speed?: number
+): Promise<Float32Array>
+```
+
+Synthesizes the provided text into speech audio.
+
+#### Parameters
+
+<ParamField path="text" type="string" required>
+  The input text to be synthesized.
+</ParamField>
+
+<ParamField path="speed" type="number" default="1.0">
+  Optional speed multiplier for the speech synthesis. Values > 1.0 are faster, < 1.0 are slower.
+</ParamField>
+
+#### Returns
+
+A promise resolving to the synthesized audio waveform as a Float32Array.
+
+#### Example
+
+```typescript
+const audio = await tts.forward('Hello, how are you?', 1.0);
+console.log('Audio samples:', audio.length);
+
+// Play the audio (implementation depends on your audio library)
+await playAudio(audio);
+```
+
+### stream()
+
+```typescript
+async *stream(input: TextToSpeechStreamingInput): AsyncGenerator<Float32Array>
+```
+
+Starts a streaming synthesis session. Yields audio chunks as they are generated.
+
+#### Parameters
+
+<ParamField path="input" type="TextToSpeechStreamingInput" required>
+  Input object containing:
+  - `text`: The text to synthesize
+  - `speed`: Optional speed multiplier (default: 1.0)
+</ParamField>
+
+#### Returns
+
+An async generator yielding Float32Array audio chunks.
+
+#### Example
+
+```typescript
+const audioChunks: Float32Array[] = [];
+
+for await (const chunk of tts.stream({ text: 'Hello world', speed: 1.0 })) {
+  console.log('Received chunk:', chunk.length, 'samples');
+  audioChunks.push(chunk);
+  
+  // Or play chunk immediately for real-time playback
+  await playAudioChunk(chunk);
+}
+
+console.log('Streaming complete, received', audioChunks.length, 'chunks');
+```
+
+### streamStop()
+
+```typescript
+streamStop(): void
+```
+
+Stops the streaming process if there is any ongoing.
+
+#### Example
+
+```typescript
+tts.streamStop();
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory.
+
+#### Example
+
+```typescript
+tts.delete();
+```
+
+## Complete Example: Single-shot Synthesis
+
+```typescript
+import { TextToSpeechModule } from 'react-native-executorch';
+import AudioPlayer from 'react-native-audio-player';
+
+class VoiceSynthesizer {
+  private tts: TextToSpeechModule;
+
+  constructor() {
+    this.tts = new TextToSpeechModule();
+  }
+
+  async initialize(language: string = 'en') {
+    console.log(`Loading TTS model for ${language}...`);
+    await this.tts.load(
+      {
+        model: {
+          type: 'kokoro',
+          durationPredictorSource: `https://example.com/duration_${language}.pte`,
+          synthesizerSource: `https://example.com/synthesizer_${language}.pte`
+        },
+        voice: {
+          lang: language,
+          voiceSource: `https://example.com/voice_${language}.bin`,
+          extra: {
+            taggerSource: `https://example.com/tagger_${language}.bin`,
+            lexiconSource: `https://example.com/lexicon_${language}.txt`
+          }
+        }
+      },
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('TTS ready!');
+  }
+
+  async speak(text: string, speed: number = 1.0) {
+    console.log(`Synthesizing: "${text}"`);
+    const audio = await this.tts.forward(text, speed);
+    console.log(`Generated ${audio.length} audio samples`);
+    
+    // Play the audio
+    await AudioPlayer.play(audio);
+  }
+
+  cleanup() {
+    this.tts.delete();
+  }
+}
+
+// Usage
+const synthesizer = new VoiceSynthesizer();
+await synthesizer.initialize('en');
+
+await synthesizer.speak('Hello, welcome to text to speech!', 1.0);
+await synthesizer.speak('This is faster speech.', 1.5);
+await synthesizer.speak('This is slower speech.', 0.8);
+
+synthesizer.cleanup();
+```
+
+## Complete Example: Streaming Synthesis
+
+```typescript
+import { TextToSpeechModule } from 'react-native-executorch';
+
+class StreamingVoiceSynthesizer {
+  private tts: TextToSpeechModule;
+  private audioQueue: Float32Array[] = [];
+
+  constructor() {
+    this.tts = new TextToSpeechModule();
+  }
+
+  async initialize() {
+    await this.tts.load({
+      model: {
+        type: 'kokoro',
+        durationPredictorSource: 'https://example.com/duration.pte',
+        synthesizerSource: 'https://example.com/synthesizer.pte'
+      },
+      voice: {
+        lang: 'en',
+        voiceSource: 'https://example.com/voice.bin',
+        extra: {
+          taggerSource: 'https://example.com/tagger.bin',
+          lexiconSource: 'https://example.com/lexicon.txt'
+        }
+      }
+    });
+  }
+
+  async streamSpeak(
+    text: string,
+    onChunk: (chunk: Float32Array) => void,
+    speed: number = 1.0
+  ) {
+    console.log(`Streaming synthesis for: "${text}"`);
+    
+    for await (const chunk of this.tts.stream({ text, speed })) {
+      console.log(`Received audio chunk: ${chunk.length} samples`);
+      onChunk(chunk);
+    }
+    
+    console.log('Streaming complete');
+  }
+
+  stop() {
+    this.tts.streamStop();
+  }
+
+  cleanup() {
+    this.tts.delete();
+  }
+}
+
+// Usage
+const streamingSynth = new StreamingVoiceSynthesizer();
+await streamingSynth.initialize();
+
+// Stream with real-time playback
+await streamingSynth.streamSpeak(
+  'This is a long sentence that will be synthesized in chunks.',
+  (chunk) => {
+    // Play chunk immediately for low-latency playback
+    playAudioChunk(chunk);
+  },
+  1.0
+);
+
+streamingSynth.cleanup();
+```
+
+## Multi-Language Support
+
+```typescript
+class MultiLanguageTTS {
+  private ttsModules: Map<string, TextToSpeechModule> = new Map();
+
+  async loadLanguage(lang: string) {
+    const tts = new TextToSpeechModule();
+    await tts.load({
+      model: {
+        type: 'kokoro',
+        durationPredictorSource: `https://example.com/duration_${lang}.pte`,
+        synthesizerSource: `https://example.com/synthesizer_${lang}.pte`
+      },
+      voice: {
+        lang,
+        voiceSource: `https://example.com/voice_${lang}.bin`,
+        extra: {
+          taggerSource: `https://example.com/tagger_${lang}.bin`,
+          lexiconSource: `https://example.com/lexicon_${lang}.txt`
+        }
+      }
+    });
+    this.ttsModules.set(lang, tts);
+    console.log(`Loaded ${lang} TTS`);
+  }
+
+  async speak(text: string, lang: string, speed: number = 1.0) {
+    const tts = this.ttsModules.get(lang);
+    if (!tts) {
+      throw new Error(`Language ${lang} not loaded`);
+    }
+    return await tts.forward(text, speed);
+  }
+
+  cleanupAll() {
+    this.ttsModules.forEach(tts => tts.delete());
+    this.ttsModules.clear();
+  }
+}
+
+// Usage
+const multiTTS = new MultiLanguageTTS();
+
+// Load multiple languages
+await multiTTS.loadLanguage('en');
+await multiTTS.loadLanguage('es');
+await multiTTS.loadLanguage('fr');
+
+// Speak in different languages
+const englishAudio = await multiTTS.speak('Hello world', 'en');
+const spanishAudio = await multiTTS.speak('Hola mundo', 'es');
+const frenchAudio = await multiTTS.speak('Bonjour le monde', 'fr');
+
+multiTTS.cleanupAll();
+```
+
+## Speed Control Examples
+
+```typescript
+// Normal speed
+await tts.forward('Normal speed speech', 1.0);
+
+// Fast speech (1.5x)
+await tts.forward('Fast speech', 1.5);
+
+// Slow speech (0.75x)
+await tts.forward('Slow speech', 0.75);
+
+// Very fast (2x)
+await tts.forward('Very fast speech', 2.0);
+
+// Very slow (0.5x)
+await tts.forward('Very slow speech', 0.5);
+```
+
+## Batch Synthesis
+
+```typescript
+class BatchTTS {
+  private tts: TextToSpeechModule;
+
+  constructor() {
+    this.tts = new TextToSpeechModule();
+  }
+
+  async initialize() {
+    await this.tts.load(/* config */);
+  }
+
+  async synthesizeMultiple(texts: string[]): Promise<Float32Array[]> {
+    const results: Float32Array[] = [];
+    
+    for (const text of texts) {
+      console.log(`Synthesizing: "${text}"`);
+      const audio = await this.tts.forward(text);
+      results.push(audio);
+    }
+    
+    return results;
+  }
+
+  cleanup() {
+    this.tts.delete();
+  }
+}
+
+// Usage
+const batchTTS = new BatchTTS();
+await batchTTS.initialize();
+
+const sentences = [
+  'First sentence.',
+  'Second sentence.',
+  'Third sentence.'
+];
+
+const audioFiles = await batchTTS.synthesizeMultiple(sentences);
+console.log(`Generated ${audioFiles.length} audio files`);
+
+batchTTS.cleanup();
+```
+
+## Audio Format
+
+The synthesized audio is returned as:
+- **Format**: Float32Array
+- **Sample rate**: 24kHz (24,000 Hz) for Kokoro
+- **Channels**: Mono (single channel)
+- **Values**: Normalized float values (-1.0 to 1.0)
+
+## Supported Models
+
+Currently supports:
+- **Kokoro**: High-quality neural TTS with multiple language support
+
+## Performance Considerations
+
+- Synthesis is relatively fast (typically < 1 second for short sentences)
+- Streaming mode provides lower latency for long texts
+- Speed parameter doesn't significantly affect generation time
+- Always call `delete()` when done to free resources
+- Consider caching synthesized audio for repeated phrases
+
+## See Also
+
+- [useTextToSpeech Hook](/api/hooks/use-text-to-speech) - React hook alternative
+- [TextToSpeechConfig Type](/api/types/text-to-speech-config)
+- [TextToSpeechStreamingInput Type](/api/types/text-to-speech-streaming-input)
+- [VoiceConfig Type](/api/types/voice-config)

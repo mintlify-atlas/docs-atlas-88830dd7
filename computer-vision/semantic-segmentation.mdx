@@ -1,0 +1,569 @@
+---
+title: Semantic Segmentation
+description: Classify every pixel in an image for precise scene understanding
+---
+
+Semantic segmentation classifies each pixel in an image into predefined categories, enabling precise scene understanding, background removal, and object isolation. React Native ExecuTorch supports multiple architectures including DeepLab, FCN, and specialized models like selfie segmentation.
+
+## Quick Start
+
+```tsx
+import { useSemanticSegmentation, DEEPLAB_V3_RESNET50 } from 'react-native-executorch';
+
+function Segmenter() {
+  const { isReady, forward } = useSemanticSegmentation({
+    model: DEEPLAB_V3_RESNET50,
+  });
+
+  const segmentImage = async (imageUri: string) => {
+    const result = await forward(imageUri, ['PERSON', 'CAR']);
+    // { ARGMAX: Int32Array, PERSON: Float32Array, CAR: Float32Array }
+  };
+
+  return <Button title="Segment" onPress={() => segmentImage(imageUri)} />;
+}
+```
+
+## Hook API
+
+### `useSemanticSegmentation<C>(props)`
+
+Manages a semantic segmentation model instance.
+
+#### Type Parameters
+
+<ParamField path="C" type="SemanticSegmentationModelSources">
+  Model configuration type that determines available labels
+</ParamField>
+
+#### Parameters
+
+<ParamField path="model" type="C" required>
+  Model configuration object
+  
+  <Expandable title="properties">
+    <ParamField path="modelName" type="SemanticSegmentationModelName" required>
+      Built-in model name (e.g., 'deeplab-v3-resnet50', 'selfie-segmentation')
+    </ParamField>
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source of the model binary
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Error object if loading or inference fails
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Whether the model is loaded and ready
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Whether the model is currently processing
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress (0-1)
+</ResponseField>
+
+<ResponseField name="forward" type="<K>(imageSource: string, classesOfInterest?: K[], resizeToInput?: boolean) => Promise<Record<'ARGMAX', Int32Array> & Record<K, Float32Array>>">
+  Perform semantic segmentation on an image.
+  
+  **Parameters:**
+  - `imageSource`: Image URI
+  - `classesOfInterest`: Optional array of label keys to include probability masks for
+  - `resizeToInput`: Whether to resize output to input dimensions (default: true)
+  
+  **Returns:**
+  - `ARGMAX`: Int32Array of per-pixel class indices
+  - Per-class probability masks as Float32Array (0-1) for requested classes
+</ResponseField>
+
+## Available Models
+
+### DeepLab V3 Models
+
+State-of-the-art semantic segmentation with multiple backbones.
+
+#### DEEPLAB_V3_RESNET50
+
+```tsx
+import { DEEPLAB_V3_RESNET50 } from 'react-native-executorch';
+
+const segmenter = useSemanticSegmentation({
+  model: DEEPLAB_V3_RESNET50,
+});
+```
+
+**Specifications:**
+- **Backbone**: ResNet-50
+- **Classes**: 21 PASCAL VOC classes
+- **Inference Time**: ~300-400ms
+- **mIoU**: ~76%
+
+#### DEEPLAB_V3_RESNET101
+
+```tsx
+import { DEEPLAB_V3_RESNET101 } from 'react-native-executorch';
+```
+
+**Specifications:**
+- **Backbone**: ResNet-101
+- **Classes**: 21 PASCAL VOC classes
+- **Inference Time**: ~400-500ms
+- **mIoU**: ~78%
+
+#### DEEPLAB_V3_MOBILENET_V3_LARGE
+
+```tsx
+import { DEEPLAB_V3_MOBILENET_V3_LARGE } from 'react-native-executorch';
+```
+
+**Specifications:**
+- **Backbone**: MobileNetV3-Large
+- **Classes**: 21 PASCAL VOC classes
+- **Inference Time**: ~200-250ms
+- **mIoU**: ~72%
+
+### FCN Models
+
+Fully Convolutional Networks for segmentation.
+
+#### FCN_RESNET50
+
+```tsx
+import { FCN_RESNET50 } from 'react-native-executorch';
+```
+
+#### FCN_RESNET101
+
+```tsx
+import { FCN_RESNET101 } from 'react-native-executorch';
+```
+
+### LRASPP Model
+
+Lightweight segmentation for mobile devices.
+
+#### LRASPP_MOBILENET_V3_LARGE
+
+```tsx
+import { LRASPP_MOBILENET_V3_LARGE } from 'react-native-executorch';
+```
+
+**Specifications:**
+- **Backbone**: MobileNetV3-Large
+- **Classes**: 21 PASCAL VOC classes
+- **Inference Time**: ~150-200ms
+- **mIoU**: ~70%
+
+### Quantized Models
+
+All models available in quantized (INT8) versions for reduced memory:
+
+```tsx
+import {
+  DEEPLAB_V3_RESNET50_QUANTIZED,
+  DEEPLAB_V3_RESNET101_QUANTIZED,
+  DEEPLAB_V3_MOBILENET_V3_LARGE_QUANTIZED,
+  LRASPP_MOBILENET_V3_LARGE_QUANTIZED,
+  FCN_RESNET50_QUANTIZED,
+  FCN_RESNET101_QUANTIZED,
+} from 'react-native-executorch';
+```
+
+### Selfie Segmentation
+
+Specialized model for person segmentation.
+
+#### SELFIE_SEGMENTATION
+
+```tsx
+import { SELFIE_SEGMENTATION } from 'react-native-executorch';
+
+const segmenter = useSemanticSegmentation({
+  model: SELFIE_SEGMENTATION,
+});
+```
+
+**Specifications:**
+- **Classes**: 2 (SELFIE, BACKGROUND)
+- **Inference Time**: ~50-100ms
+- **Use Case**: Portrait mode, background replacement
+
+## Segmentation Labels
+
+### DeepLab Labels
+
+PASCAL VOC 21 classes:
+
+```typescript
+import { DeeplabLabel } from 'react-native-executorch';
+
+DeeplabLabel.BACKGROUND
+DeeplabLabel.AEROPLANE
+DeeplabLabel.BICYCLE
+DeeplabLabel.BIRD
+DeeplabLabel.BOAT
+DeeplabLabel.BOTTLE
+DeeplabLabel.BUS
+DeeplabLabel.CAR
+DeeplabLabel.CAT
+DeeplabLabel.CHAIR
+DeeplabLabel.COW
+DeeplabLabel.DININGTABLE
+DeeplabLabel.DOG
+DeeplabLabel.HORSE
+DeeplabLabel.MOTORBIKE
+DeeplabLabel.PERSON
+DeeplabLabel.POTTEDPLANT
+DeeplabLabel.SHEEP
+DeeplabLabel.SOFA
+DeeplabLabel.TRAIN
+DeeplabLabel.TVMONITOR
+```
+
+### Selfie Segmentation Labels
+
+```typescript
+import { SelfieSegmentationLabel } from 'react-native-executorch';
+
+SelfieSegmentationLabel.SELFIE
+SelfieSegmentationLabel.BACKGROUND
+```
+
+## Complete Example
+
+```tsx
+import React, { useState } from 'react';
+import { View, Image, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import {
+  useSemanticSegmentation,
+  DEEPLAB_V3_MOBILENET_V3_LARGE,
+  DeeplabLabel,
+} from 'react-native-executorch';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+function SemanticSegmentationDemo() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [maskData, setMaskData] = useState<Int32Array | null>(null);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+
+  const { isReady, isGenerating, error, forward } = useSemanticSegmentation({
+    model: DEEPLAB_V3_MOBILENET_V3_LARGE,
+  });
+
+  const selectAndSegment = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    
+    if (result.assets && result.assets[0]) {
+      const asset = result.assets[0];
+      setImageUri(asset.uri!);
+      setImageDimensions({
+        width: asset.width || 300,
+        height: asset.height || 300,
+      });
+
+      try {
+        // Request only PERSON and CAR probability masks
+        const segResult = await forward(
+          asset.uri!,
+          ['PERSON', 'CAR'],
+          true // Resize to input dimensions
+        );
+        
+        setMaskData(segResult.ARGMAX);
+        
+        // Access per-class probabilities
+        const personMask = segResult.PERSON; // Float32Array
+        const carMask = segResult.CAR; // Float32Array
+        
+        console.log('Segmentation complete');
+        console.log('Person pixels:', countPixels(segResult.ARGMAX, DeeplabLabel.PERSON));
+      } catch (err) {
+        console.error('Segmentation failed:', err);
+      }
+    }
+  };
+
+  const countPixels = (mask: Int32Array, classIndex: number): number => {
+    return Array.from(mask).filter(pixel => pixel === classIndex).length;
+  };
+
+  const visualizeMask = () => {
+    if (!maskData) return null;
+    
+    // Create colored mask visualization
+    const colors: Record<number, string> = {
+      [DeeplabLabel.PERSON]: 'rgba(255, 0, 0, 0.5)',
+      [DeeplabLabel.CAR]: 'rgba(0, 255, 0, 0.5)',
+      [DeeplabLabel.DOG]: 'rgba(0, 0, 255, 0.5)',
+      // Add more colors as needed
+    };
+    
+    // Render mask overlay (simplified - use Canvas or custom renderer in production)
+    return <View style={styles.maskOverlay} />;
+  };
+
+  if (error) return <Text>Error: {error.message}</Text>;
+  if (!isReady) return <Text>Loading model...</Text>;
+
+  return (
+    <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={selectAndSegment}
+        disabled={isGenerating}
+      >
+        <Text style={styles.buttonText}>
+          {isGenerating ? 'Segmenting...' : 'Select & Segment Image'}
+        </Text>
+      </TouchableOpacity>
+
+      {imageUri && (
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: imageUri }} style={styles.image} />
+          {visualizeMask()}
+        </View>
+      )}
+
+      {maskData && (
+        <View style={styles.stats}>
+          <Text style={styles.statsText}>
+            Pixels segmented: {maskData.length.toLocaleString()}
+          </Text>
+          <Text style={styles.statsText}>
+            People detected: {countPixels(maskData, DeeplabLabel.PERSON) > 0 ? 'Yes' : 'No'}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20 },
+  button: { backgroundColor: '#007AFF', padding: 15, borderRadius: 8, marginBottom: 20 },
+  buttonText: { color: 'white', fontSize: 16, textAlign: 'center' },
+  imageContainer: { width: '100%', aspectRatio: 1, marginBottom: 20, position: 'relative' },
+  image: { width: '100%', height: '100%', borderRadius: 8 },
+  maskOverlay: { ...StyleSheet.absoluteFillObject, borderRadius: 8 },
+  stats: { padding: 15, backgroundColor: '#f5f5f5', borderRadius: 8 },
+  statsText: { fontSize: 14, marginVertical: 4 },
+});
+
+export default SemanticSegmentationDemo;
+```
+
+## Use Cases
+
+### Background Removal
+
+Remove background using selfie segmentation:
+
+```tsx
+import { SELFIE_SEGMENTATION, SelfieSegmentationLabel } from 'react-native-executorch';
+
+const removeBackground = async (imageUri: string) => {
+  const segmenter = useSemanticSegmentation({
+    model: SELFIE_SEGMENTATION,
+  });
+  
+  const result = await segmenter.forward(imageUri, ['SELFIE'], true);
+  const selfieMask = result.SELFIE; // Float32Array of probabilities
+  
+  // Use mask with image processing library to remove background
+  // Each pixel in selfieMask: 0 = background, 1 = person
+  return selfieMask;
+};
+```
+
+### Object Isolation
+
+Isolate specific objects from scenes:
+
+```tsx
+const isolateCars = async (imageUri: string) => {
+  const result = await forward(imageUri, ['CAR'], true);
+  const carMask = result.CAR;
+  const argmax = result.ARGMAX;
+  
+  // Count car pixels
+  const carPixels = Array.from(argmax).filter(
+    pixel => pixel === DeeplabLabel.CAR
+  ).length;
+  
+  console.log(`Car coverage: ${(carPixels / argmax.length * 100).toFixed(2)}%`);
+  
+  return carMask;
+};
+```
+
+### Scene Understanding
+
+Analyze scene composition:
+
+```tsx
+const analyzeScene = async (imageUri: string) => {
+  const result = await forward(imageUri);
+  const argmax = result.ARGMAX;
+  
+  // Count pixels per class
+  const classCounts: Record<number, number> = {};
+  for (const pixel of argmax) {
+    classCounts[pixel] = (classCounts[pixel] || 0) + 1;
+  }
+  
+  // Get dominant classes
+  const sorted = Object.entries(classCounts)
+    .map(([classId, count]) => ({
+      label: DeeplabLabel[parseInt(classId)],
+      percentage: (count / argmax.length) * 100,
+    }))
+    .sort((a, b) => b.percentage - a.percentage);
+  
+  return sorted;
+};
+```
+
+### Augmented Reality Effects
+
+Apply effects to segmented regions:
+
+```tsx
+const applyBackgroundBlur = async (imageUri: string) => {
+  const result = await forward(imageUri, ['PERSON'], true);
+  const personMask = result.PERSON;
+  
+  // Use mask to blur only background pixels
+  // personMask values close to 1 = keep sharp
+  // personMask values close to 0 = apply blur
+  
+  return personMask;
+};
+```
+
+## Performance Tips
+
+### Model Selection
+
+Choose based on requirements:
+
+- **Real-time needs**: LRASPP_MOBILENET_V3_LARGE or quantized models
+- **High accuracy**: DEEPLAB_V3_RESNET101
+- **Balanced**: DEEPLAB_V3_MOBILENET_V3_LARGE
+- **Portrait/selfie only**: SELFIE_SEGMENTATION
+
+### Request Only Needed Classes
+
+```tsx
+// Efficient - only computes PERSON mask
+const result = await forward(imageUri, ['PERSON'], true);
+
+// Less efficient - computes all 21 class masks
+const result = await forward(imageUri, Object.keys(DeeplabLabel), true);
+```
+
+### Resize Control
+
+```tsx
+// Get raw model output (faster, smaller arrays)
+const result = await forward(imageUri, ['PERSON'], false);
+
+// Get resized to input dimensions (slower, easier to use)
+const result = await forward(imageUri, ['PERSON'], true);
+```
+
+### Memory Management
+
+Process masks efficiently:
+
+```tsx
+const processLargeMask = (mask: Float32Array) => {
+  // Process in chunks to avoid memory spikes
+  const chunkSize = 10000;
+  for (let i = 0; i < mask.length; i += chunkSize) {
+    const chunk = mask.slice(i, i + chunkSize);
+    // Process chunk
+  }
+};
+```
+
+## Visualization
+
+Render segmentation masks:
+
+```tsx
+import { Canvas, useCanvasRef } from '@shopify/react-native-skia';
+
+const SegmentationCanvas = ({ mask, width, height, colors }) => {
+  const canvasRef = useCanvasRef();
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !mask) return;
+    
+    const imageData = canvas.getContext('2d').createImageData(width, height);
+    
+    for (let i = 0; i < mask.length; i++) {
+      const classId = mask[i];
+      const color = colors[classId] || [0, 0, 0, 0];
+      
+      imageData.data[i * 4] = color[0];     // R
+      imageData.data[i * 4 + 1] = color[1]; // G
+      imageData.data[i * 4 + 2] = color[2]; // B
+      imageData.data[i * 4 + 3] = color[3]; // A
+    }
+    
+    canvas.getContext('2d').putImageData(imageData, 0, 0);
+  }, [mask, width, height, colors]);
+  
+  return <Canvas ref={canvasRef} style={{ width, height }} />;
+};
+```
+
+## Type Reference
+
+```typescript
+import { ResourceSource, LabelEnum } from 'react-native-executorch';
+
+type SemanticSegmentationModelSources =
+  | { modelName: 'deeplab-v3-resnet50'; modelSource: ResourceSource }
+  | { modelName: 'deeplab-v3-resnet101'; modelSource: ResourceSource }
+  | { modelName: 'deeplab-v3-mobilenet-v3-large'; modelSource: ResourceSource }
+  | { modelName: 'lraspp-mobilenet-v3-large'; modelSource: ResourceSource }
+  | { modelName: 'fcn-resnet50'; modelSource: ResourceSource }
+  | { modelName: 'fcn-resnet101'; modelSource: ResourceSource }
+  | { modelName: 'selfie-segmentation'; modelSource: ResourceSource }
+  // ... and quantized variants
+
+interface SemanticSegmentationProps<C extends SemanticSegmentationModelSources> {
+  model: C;
+  preventLoad?: boolean;
+}
+
+interface SemanticSegmentationType<L extends LabelEnum> {
+  error: RnExecutorchError | null;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  forward: <K extends keyof L>(
+    imageSource: string,
+    classesOfInterest?: K[],
+    resizeToInput?: boolean
+  ) => Promise<Record<'ARGMAX', Int32Array> & Record<K, Float32Array>>;
+}
+```
+
+## Related
+
+- [Object Detection](/computer-vision/object-detection) - Bounding box detection
+- [Classification](/computer-vision/classification) - Image categorization
+- [Style Transfer](/computer-vision/style-transfer) - Artistic effects

@@ -1,0 +1,480 @@
+---
+title: 'TextEmbeddingsModule'
+description: 'Class-based API for generating text embeddings'
+icon: 'hashtag'
+---
+
+## Overview
+
+`TextEmbeddingsModule` provides a class-based interface for generating dense vector embeddings from text. These embeddings can be used for semantic search, similarity comparison, clustering, or as features for downstream tasks.
+
+## When to Use
+
+**Use `TextEmbeddingsModule` when:**
+- You need manual control over model lifecycle
+- You're working outside React components
+- You need to process text programmatically
+- You want to integrate text embeddings into non-React code
+
+**Use `useTextEmbeddings` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Extends
+
+`TextEmbeddingsModule` extends [BaseModule](/api/modules/base-module).
+
+## Constructor
+
+```typescript
+new TextEmbeddingsModule()
+```
+
+Creates a new text embeddings module instance.
+
+### Example
+
+```typescript
+import { TextEmbeddingsModule } from 'react-native-executorch';
+
+const embedder = new TextEmbeddingsModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  model: {
+    modelSource: ResourceSource;
+    tokenizerSource: ResourceSource;
+  },
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the text embeddings model and tokenizer.
+
+#### Parameters
+
+<ParamField path="model.modelSource" type="ResourceSource" required>
+  Resource location of the text embeddings model binary.
+</ParamField>
+
+<ParamField path="model.tokenizerSource" type="ResourceSource" required>
+  Resource location of the tokenizer JSON file.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to track download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await embedder.load(
+  {
+    modelSource: 'https://example.com/text_embedder.pte',
+    tokenizerSource: 'https://example.com/tokenizer.json'
+  },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### forward()
+
+```typescript
+async forward(input: string): Promise<Float32Array>
+```
+
+Executes the model's forward pass and returns an embedding vector for the given text.
+
+#### Parameters
+
+<ParamField path="input" type="string" required>
+  The text string to embed.
+</ParamField>
+
+#### Returns
+
+A `Float32Array` containing the vector embeddings (typically 384, 512, or 768 dimensions).
+
+#### Example
+
+```typescript
+const embedding = await embedder.forward('Machine learning is fascinating');
+console.log('Embedding dimensions:', embedding.length);
+console.log('Embedding:', embedding);
+// Float32Array(384) [0.234, -0.567, 0.891, ...]
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory and releases native resources.
+
+#### Example
+
+```typescript
+embedder.delete();
+```
+
+## Complete Example: Semantic Search
+
+```typescript
+import { TextEmbeddingsModule } from 'react-native-executorch';
+
+class SemanticSearchEngine {
+  private embedder: TextEmbeddingsModule;
+  private documents: Map<string, { text: string; embedding: Float32Array }> = new Map();
+
+  constructor() {
+    this.embedder = new TextEmbeddingsModule();
+  }
+
+  async initialize() {
+    await this.embedder.load(
+      {
+        modelSource: 'https://example.com/embedder.pte',
+        tokenizerSource: 'https://example.com/tokenizer.json'
+      },
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('Text embedder ready!');
+  }
+
+  async addDocument(id: string, text: string) {
+    const embedding = await this.embedder.forward(text);
+    this.documents.set(id, { text, embedding });
+    console.log(`Indexed document: ${id}`);
+  }
+
+  async search(query: string, topK: number = 5) {
+    const queryEmbedding = await this.embedder.forward(query);
+    
+    // Calculate cosine similarity with all documents
+    const results = Array.from(this.documents.entries()).map(
+      ([id, doc]) => ({
+        id,
+        text: doc.text,
+        similarity: this.cosineSimilarity(queryEmbedding, doc.embedding)
+      })
+    );
+    
+    // Sort by similarity and return top K
+    return results
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, topK);
+  }
+
+  private cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  cleanup() {
+    this.embedder.delete();
+    this.documents.clear();
+  }
+}
+
+// Usage
+const search = new SemanticSearchEngine();
+await search.initialize();
+
+// Index documents
+await search.addDocument('doc1', 'React Native is a mobile framework');
+await search.addDocument('doc2', 'Python is a programming language');
+await search.addDocument('doc3', 'Mobile development with JavaScript');
+await search.addDocument('doc4', 'Machine learning with neural networks');
+
+// Search
+const results = await search.search('mobile app development', 3);
+console.log('Search results:');
+results.forEach((result, i) => {
+  console.log(`${i + 1}. [${result.similarity.toFixed(3)}] ${result.text}`);
+});
+
+search.cleanup();
+```
+
+## Text Clustering Example
+
+```typescript
+class TextClusterer {
+  private embedder: TextEmbeddingsModule;
+
+  constructor() {
+    this.embedder = new TextEmbeddingsModule();
+  }
+
+  async initialize() {
+    await this.embedder.load({
+      modelSource: 'https://example.com/embedder.pte',
+      tokenizerSource: 'https://example.com/tokenizer.json'
+    });
+  }
+
+  async clusterTexts(texts: string[], numClusters: number) {
+    // Generate embeddings for all texts
+    console.log('Generating embeddings...');
+    const embeddings = await Promise.all(
+      texts.map(text => this.embedder.forward(text))
+    );
+
+    // Simple k-means clustering (simplified)
+    const clusters = this.kMeansClustering(embeddings, numClusters);
+    
+    // Map back to original texts
+    return clusters.map(cluster => 
+      cluster.map(idx => texts[idx])
+    );
+  }
+
+  private kMeansClustering(
+    embeddings: Float32Array[], 
+    k: number
+  ): number[][] {
+    // Simplified k-means - in production use a proper library
+    const assignments = embeddings.map(() => 
+      Math.floor(Math.random() * k)
+    );
+    
+    const clusters: number[][] = Array.from({ length: k }, () => []);
+    assignments.forEach((clusterIdx, textIdx) => {
+      clusters[clusterIdx].push(textIdx);
+    });
+    
+    return clusters;
+  }
+
+  cleanup() {
+    this.embedder.delete();
+  }
+}
+
+// Usage
+const clusterer = new TextClusterer();
+await clusterer.initialize();
+
+const texts = [
+  'I love programming in JavaScript',
+  'Python is great for data science',
+  'Mobile apps are built with React Native',
+  'Machine learning uses neural networks',
+  'TypeScript adds types to JavaScript',
+  'Deep learning is a subset of ML'
+];
+
+const clusters = await clusterer.clusterTexts(texts, 2);
+console.log('Cluster 1:', clusters[0]);
+console.log('Cluster 2:', clusters[1]);
+
+clusterer.cleanup();
+```
+
+## Similarity Comparison
+
+```typescript
+class TextSimilarityAnalyzer {
+  private embedder: TextEmbeddingsModule;
+
+  constructor() {
+    this.embedder = new TextEmbeddingsModule();
+  }
+
+  async initialize() {
+    await this.embedder.load({
+      modelSource: 'https://example.com/embedder.pte',
+      tokenizerSource: 'https://example.com/tokenizer.json'
+    });
+  }
+
+  async compare(text1: string, text2: string): Promise<number> {
+    const [embedding1, embedding2] = await Promise.all([
+      this.embedder.forward(text1),
+      this.embedder.forward(text2)
+    ]);
+    
+    return this.cosineSimilarity(embedding1, embedding2);
+  }
+
+  async compareMany(baseText: string, comparisons: string[]) {
+    const baseEmbedding = await this.embedder.forward(baseText);
+    
+    const results = [];
+    for (const text of comparisons) {
+      const embedding = await this.embedder.forward(text);
+      const similarity = this.cosineSimilarity(baseEmbedding, embedding);
+      results.push({ text, similarity });
+    }
+    
+    return results.sort((a, b) => b.similarity - a.similarity);
+  }
+
+  private cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  cleanup() {
+    this.embedder.delete();
+  }
+}
+
+// Usage
+const analyzer = new TextSimilarityAnalyzer();
+await analyzer.initialize();
+
+// Compare two texts
+const similarity = await analyzer.compare(
+  'I enjoy playing basketball',
+  'I like playing sports'
+);
+console.log(`Similarity: ${(similarity * 100).toFixed(1)}%`);
+
+// Compare one text against multiple
+const comparisons = await analyzer.compareMany(
+  'I love programming',
+  [
+    'I enjoy coding',
+    'I like cooking',
+    'Software development is fun',
+    'I play guitar'
+  ]
+);
+
+comparisons.forEach(result => {
+  console.log(`${(result.similarity * 100).toFixed(1)}% - ${result.text}`);
+});
+
+analyzer.cleanup();
+```
+
+## Batch Processing
+
+```typescript
+class BatchTextEmbedder {
+  private embedder: TextEmbeddingsModule;
+
+  constructor() {
+    this.embedder = new TextEmbeddingsModule();
+  }
+
+  async initialize() {
+    await this.embedder.load({
+      modelSource: 'https://example.com/embedder.pte',
+      tokenizerSource: 'https://example.com/tokenizer.json'
+    });
+  }
+
+  async embedBatch(texts: string[]): Promise<Map<string, Float32Array>> {
+    const results = new Map<string, Float32Array>();
+    
+    for (const text of texts) {
+      console.log(`Processing: "${text.substring(0, 50)}..."`);
+      const embedding = await this.embedder.forward(text);
+      results.set(text, embedding);
+    }
+    
+    return results;
+  }
+
+  async saveEmbeddings(texts: string[], outputPath: string) {
+    const embeddings = await this.embedBatch(texts);
+    
+    // Convert to JSON-serializable format
+    const data = Array.from(embeddings.entries()).map(([text, embedding]) => ({
+      text,
+      embedding: Array.from(embedding)
+    }));
+    
+    // Save to file
+    const RNFS = require('react-native-fs');
+    await RNFS.writeFile(outputPath, JSON.stringify(data, null, 2));
+    console.log(`Saved ${data.length} embeddings to ${outputPath}`);
+  }
+
+  cleanup() {
+    this.embedder.delete();
+  }
+}
+
+// Usage
+const batchEmbedder = new BatchTextEmbedder();
+await batchEmbedder.initialize();
+
+const texts = [
+  'First document text',
+  'Second document text',
+  'Third document text'
+];
+
+const embeddings = await batchEmbedder.embedBatch(texts);
+console.log(`Generated ${embeddings.size} embeddings`);
+
+// Or save to file
+await batchEmbedder.saveEmbeddings(texts, '/path/to/embeddings.json');
+
+batchEmbedder.cleanup();
+```
+
+## Use Cases
+
+- **Semantic Search**: Find documents by meaning, not just keywords
+- **Similarity Detection**: Identify similar or duplicate content
+- **Question Answering**: Match questions to relevant answers
+- **Recommendation**: Recommend similar content based on user preferences
+- **Clustering**: Group similar texts together
+- **Classification**: Use embeddings as features for text classification
+- **Multilingual Search**: Compare texts across languages (with multilingual models)
+
+## Performance Considerations
+
+- Embedding generation is fast (typically < 50ms per text)
+- Cache embeddings for frequently used texts
+- Use vector databases (like FAISS) for large-scale similarity search
+- Normalize embeddings before storing for efficient cosine similarity
+- Batch processing is more efficient than individual calls
+- Always call `delete()` when done to free memory
+
+## Common Models
+
+- **sentence-transformers/all-MiniLM-L6-v2**: 384 dimensions, fast and efficient
+- **sentence-transformers/all-mpnet-base-v2**: 768 dimensions, higher quality
+- **BAAI/bge-small-en-v1.5**: 384 dimensions, optimized for retrieval
+
+## See Also
+
+- [BaseModule](/api/modules/base-module) - Base class with shared functionality
+- [useTextEmbeddings Hook](/api/hooks/use-text-embeddings) - React hook alternative
+- [ImageEmbeddingsModule](/api/modules/image-embeddings-module) - For image embeddings
+- [ResourceSource Type](/api/types/resource-source)

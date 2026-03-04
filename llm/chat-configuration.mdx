@@ -1,0 +1,317 @@
+---
+title: Chat Configuration
+description: Configure system prompts, context management, and generation parameters
+---
+
+# Chat Configuration
+
+The `configure` method allows you to customize how your LLM handles conversations, manages context, and generates responses.
+
+## Configuration Overview
+
+```tsx
+llm.configure({
+  chatConfig: { /* ... */ },
+  toolsConfig: { /* ... */ },
+  generationConfig: { /* ... */ },
+});
+```
+
+## Chat Configuration
+
+The `chatConfig` object manages conversation behavior and context handling.
+
+### System Prompt
+
+Define the model's personality and instructions:
+
+```tsx
+llm.configure({
+  chatConfig: {
+    systemPrompt: 'You are a helpful AI assistant specializing in React Native development.',
+  },
+});
+```
+
+<ParamField path="chatConfig.systemPrompt" type="string">
+  Instructions that define the model's behavior and personality. This appears at the start of every conversation context.
+  
+  **Common use cases:**
+  - Setting personality ("You are a friendly tutor")
+  - Defining expertise ("You are an expert in TypeScript")
+  - Setting constraints ("Answer in one sentence")
+  - Formatting output ("Respond in JSON format")
+</ParamField>
+
+### Initial Message History
+
+Provide conversation context at initialization:
+
+```tsx
+llm.configure({
+  chatConfig: {
+    systemPrompt: 'You are a helpful assistant.',
+    initialMessageHistory: [
+      { role: 'user', content: 'Hello!' },
+      { role: 'assistant', content: 'Hi! How can I help you today?' },
+    ],
+  },
+});
+```
+
+<ParamField path="chatConfig.initialMessageHistory" type="Message[]">
+  Pre-populate the conversation history. Useful for:
+  - Resuming saved conversations
+  - Providing examples (few-shot prompting)
+  - Setting conversation tone
+</ParamField>
+
+### Context Strategy
+
+Manage how conversation history fits within the model's context window:
+
+```tsx
+import { SlidingWindowContextStrategy } from 'react-native-executorch/utils';
+
+llm.configure({
+  chatConfig: {
+    contextStrategy: new SlidingWindowContextStrategy(
+      1000, // Buffer 1000 tokens for generation
+      false // Don't allow orphaned assistant messages
+    ),
+  },
+});
+```
+
+<ParamField path="chatConfig.contextStrategy" type="ContextStrategy">
+  Strategy for managing the conversation context window. See [Context Strategies](/llm/context-strategies) for detailed information.
+</ParamField>
+
+## Tools Configuration
+
+Enable the model to call external functions. See [Tool Calling](/llm/tool-calling) for complete details.
+
+```tsx
+llm.configure({
+  toolsConfig: {
+    tools: [/* tool definitions */],
+    executeToolCallback: async (call) => {
+      // Execute the tool and return result
+    },
+    displayToolCalls: false,
+  },
+});
+```
+
+<ParamField path="toolsConfig.tools" type="LLMTool[]">
+  Array of tool definitions. Format depends on your model's chat template.
+</ParamField>
+
+<ParamField path="toolsConfig.executeToolCallback" type="function">
+  Async function that receives a `ToolCall` and returns the result as a string.
+  
+  ```typescript
+  executeToolCallback: (call: ToolCall) => Promise<string | null>
+  ```
+</ParamField>
+
+<ParamField path="toolsConfig.displayToolCalls" type="boolean" default="false">
+  Whether to include JSON tool call representations in the message history. If `false`, only the final answers are shown.
+</ParamField>
+
+<Warning>
+Tool calling only works if your model's chat template supports it. Most instruction-tuned models like Llama 3.2 support tool calling.
+</Warning>
+
+## Generation Configuration
+
+Control how the model generates text:
+
+```tsx
+llm.configure({
+  generationConfig: {
+    temperature: 0.7,
+    topp: 0.9,
+    outputTokenBatchSize: 10,
+    batchTimeInterval: 100,
+  },
+});
+```
+
+<ParamField path="generationConfig.temperature" type="number" default="1.0">
+  Controls randomness and creativity in generation.
+  
+  - **Lower values (0.1-0.5)**: More focused, deterministic, factual
+  - **Medium values (0.6-0.9)**: Balanced creativity and coherence
+  - **Higher values (1.0+)**: More creative, diverse, potentially less coherent
+  
+  ```tsx
+  // For factual Q&A
+  temperature: 0.3
+  
+  // For creative writing
+  temperature: 0.9
+  ```
+</ParamField>
+
+<ParamField path="generationConfig.topp" type="number" default="1.0">
+  Nucleus sampling parameter. Only samples from tokens whose cumulative probability exceeds this value.
+  
+  - **0.9**: Recommended for most use cases (good balance)
+  - **0.95**: Slightly more diverse
+  - **1.0**: Consider all tokens (no filtering)
+  
+  ```tsx
+  topp: 0.9 // Recommended default
+  ```
+</ParamField>
+
+<ParamField path="generationConfig.outputTokenBatchSize" type="number" default="1">
+  Soft upper limit on tokens per batch for streaming. Higher values reduce update frequency but may improve performance.
+  
+  ```tsx
+  // Update every token (smooth but frequent)
+  outputTokenBatchSize: 1
+  
+  // Update every 10 tokens (less smooth but more efficient)
+  outputTokenBatchSize: 10
+  ```
+  
+  <Info>
+  This is a "soft" limit. In certain cases (like emoji sequences), batches may be larger to avoid breaking combined characters.
+  </Info>
+</ParamField>
+
+<ParamField path="generationConfig.batchTimeInterval" type="number" default="0">
+  Maximum time (in milliseconds) between token batch emissions. Works with `outputTokenBatchSize`.
+  
+  ```tsx
+  batchTimeInterval: 100 // Emit at least every 100ms
+  ```
+</ParamField>
+
+## Complete Configuration Example
+
+```tsx
+import React, { useEffect } from 'react';
+import { useLLM } from 'react-native-executorch';
+import { LLAMA3_2_3B } from 'react-native-executorch/constants';
+import {
+  SlidingWindowContextStrategy,
+  MessageCountContextStrategy,
+} from 'react-native-executorch/utils';
+
+function ConfiguredChat() {
+  const llm = useLLM({ model: LLAMA3_2_3B });
+
+  useEffect(() => {
+    if (llm.isReady) {
+      llm.configure({
+        // Chat configuration
+        chatConfig: {
+          systemPrompt: `You are an expert React Native developer.
+          Provide concise, accurate answers with code examples when relevant.
+          Always explain your reasoning.`,
+          
+          // Optional: Provide initial context
+          initialMessageHistory: [
+            {
+              role: 'user',
+              content: 'I need help with React Native.',
+            },
+            {
+              role: 'assistant',
+              content: 'I\'d be happy to help! What specific aspect of React Native are you working on?',
+            },
+          ],
+          
+          // Use sliding window to manage context automatically
+          contextStrategy: new SlidingWindowContextStrategy(
+            2000, // Reserve 2000 tokens for generation
+            false // Ensure user-assistant message pairs stay together
+          ),
+        },
+        
+        // Generation configuration
+        generationConfig: {
+          temperature: 0.7, // Balanced creativity
+          topp: 0.9,        // Nucleus sampling
+          outputTokenBatchSize: 5, // Update every 5 tokens
+          batchTimeInterval: 50,   // Or every 50ms
+        },
+      });
+    }
+  }, [llm.isReady]);
+
+  // Rest of component...
+}
+```
+
+## Dynamic Reconfiguration
+
+You can call `configure` multiple times to adjust behavior:
+
+```tsx
+// Switch to creative mode
+const setCreativeMode = () => {
+  llm.configure({
+    chatConfig: {
+      systemPrompt: 'You are a creative writing assistant.',
+    },
+    generationConfig: {
+      temperature: 1.2,
+      topp: 0.95,
+    },
+  });
+};
+
+// Switch to factual mode
+const setFactualMode = () => {
+  llm.configure({
+    chatConfig: {
+      systemPrompt: 'You are a precise, factual assistant.',
+    },
+    generationConfig: {
+      temperature: 0.3,
+      topp: 0.9,
+    },
+  });
+};
+```
+
+## Type Definitions
+
+```typescript
+interface LLMConfig {
+  chatConfig?: Partial<ChatConfig>;
+  toolsConfig?: ToolsConfig;
+  generationConfig?: GenerationConfig;
+}
+
+interface ChatConfig {
+  initialMessageHistory: Message[];
+  systemPrompt: string;
+  contextStrategy: ContextStrategy;
+}
+
+interface GenerationConfig {
+  temperature?: number;
+  topp?: number;
+  outputTokenBatchSize?: number;
+  batchTimeInterval?: number;
+}
+
+interface ToolsConfig {
+  tools: LLMTool[];
+  executeToolCallback: (call: ToolCall) => Promise<string | null>;
+  displayToolCalls?: boolean;
+}
+```
+
+## Best Practices
+
+1. **Always set a system prompt** - It helps guide the model's behavior consistently
+2. **Choose appropriate temperature** - Lower for factual tasks, higher for creative tasks
+3. **Use context strategies** - Prevent context overflow errors with `SlidingWindowContextStrategy`
+4. **Configure on mount** - Set up configuration in a `useEffect` after `isReady` becomes true
+5. **Batch token updates** - Use `outputTokenBatchSize > 1` for better performance in production

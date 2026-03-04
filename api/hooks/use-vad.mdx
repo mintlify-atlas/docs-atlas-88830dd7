@@ -1,0 +1,434 @@
+---
+title: 'useVAD'
+description: 'React hook for voice activity detection'
+icon: 'waveform'
+---
+
+## Overview
+
+The `useVAD` hook manages a Voice Activity Detection (VAD) model instance for detecting speech segments in audio streams. It identifies when speech is present and returns timestamp ranges.
+
+## Import
+
+```typescript
+import { useVAD } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const vad = useVAD({ model, preventLoad }: VADProps): VADType
+```
+
+## Parameters
+
+<ParamField path="model" type="object" required>
+  Object containing model source
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source location of the VAD model binary file (.pte)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading when the hook mounts
+</ParamField>
+
+## Return Value
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the VAD model is loaded and ready for inference.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing audio.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Runs VAD on the provided audio waveform.
+  
+  ```typescript
+  forward(waveform: Float32Array): Promise<Segment[]>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="waveform" type="Float32Array" required>
+      Input audio waveform array
+    </ParamField>
+  </Expandable>
+  
+  Returns promise resolving to array of detected speech segments.
+</ResponseField>
+
+## Types
+
+### Segment
+
+```typescript
+interface Segment {
+  start: number;  // Start time in seconds
+  end: number;    // End time in seconds
+}
+```
+
+## Usage Examples
+
+### Basic Voice Activity Detection
+
+```typescript
+import { useVAD } from 'react-native-executorch';
+import { useState } from 'react';
+
+function VoiceDetector() {
+  const [segments, setSegments] = useState<any[]>([]);
+  
+  const vad = useVAD({
+    model: {
+      modelSource: 'https://huggingface.co/.../vad-model.pte',
+    },
+  });
+  
+  const detectVoice = async (audioWaveform: Float32Array) => {
+    if (!vad.isReady) return;
+    
+    try {
+      const voiceSegments = await vad.forward(audioWaveform);
+      setSegments(voiceSegments);
+      
+      console.log(`Detected ${voiceSegments.length} speech segments`);
+      voiceSegments.forEach((seg, idx) => {
+        console.log(
+          `Segment ${idx + 1}: ${seg.start.toFixed(2)}s - ${seg.end.toFixed(2)}s`
+        );
+      });
+    } catch (error) {
+      console.error('VAD failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {vad.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <Text>Speech Segments:</Text>
+      {segments.map((seg, idx) => (
+        <Text key={idx}>
+          Segment {idx + 1}: {seg.start.toFixed(2)}s - {seg.end.toFixed(2)}s
+          (Duration: {(seg.end - seg.start).toFixed(2)}s)
+        </Text>
+      ))}
+    </View>
+  );
+}
+```
+
+### Real-time Speech Detection
+
+```typescript
+import { useVAD } from 'react-native-executorch';
+import { useState, useEffect } from 'react';
+import { AudioRecorder } from 'react-native-audio';
+
+function RealtimeVAD() {
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  
+  const vad = useVAD({
+    model: {
+      modelSource: require('./models/vad.pte'),
+    },
+  });
+  
+  useEffect(() => {
+    if (!isListening || !vad.isReady) return;
+    
+    const interval = setInterval(async () => {
+      // Get recent audio buffer
+      const audioBuffer = await AudioRecorder.getRecentBuffer(1000); // 1 second
+      
+      try {
+        const segments = await vad.forward(audioBuffer);
+        setIsSpeaking(segments.length > 0);
+      } catch (error) {
+        console.error('VAD check failed:', error);
+      }
+    }, 500); // Check every 500ms
+    
+    return () => clearInterval(interval);
+  }, [isListening, vad.isReady]);
+  
+  return (
+    <View>
+      <Button
+        title={isListening ? 'Stop Listening' : 'Start Listening'}
+        onPress={() => setIsListening(!isListening)}
+        disabled={!vad.isReady}
+      />
+      
+      <View
+        style={{
+          width: 50,
+          height: 50,
+          borderRadius: 25,
+          backgroundColor: isSpeaking ? 'green' : 'gray',
+        }}
+      />
+      <Text>{isSpeaking ? 'Speaking...' : 'Silence'}</Text>
+    </View>
+  );
+}
+```
+
+### Extract Speech Portions from Audio
+
+```typescript
+import { useVAD } from 'react-native-executorch';
+import { useState } from 'react';
+
+function SpeechExtractor() {
+  const [speechChunks, setSpeechChunks] = useState<Float32Array[]>([]);
+  
+  const vad = useVAD({
+    model: {
+      modelSource: 'https://example.com/vad.pte',
+    },
+  });
+  
+  const extractSpeech = async (
+    audioWaveform: Float32Array,
+    sampleRate: number = 16000
+  ) => {
+    if (!vad.isReady) return;
+    
+    try {
+      const segments = await vad.forward(audioWaveform);
+      
+      // Extract audio for each segment
+      const chunks = segments.map((seg) => {
+        const startSample = Math.floor(seg.start * sampleRate);
+        const endSample = Math.floor(seg.end * sampleRate);
+        return audioWaveform.slice(startSample, endSample);
+      });
+      
+      setSpeechChunks(chunks);
+      console.log(`Extracted ${chunks.length} speech chunks`);
+    } catch (error) {
+      console.error('Speech extraction failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Extracted {speechChunks.length} speech segments</Text>
+      {speechChunks.map((chunk, idx) => (
+        <View key={idx}>
+          <Text>
+            Chunk {idx + 1}: {chunk.length} samples
+            ({(chunk.length / 16000).toFixed(2)}s)
+          </Text>
+          <Button
+            title="Play"
+            onPress={() => playAudio(chunk)}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function playAudio(waveform: Float32Array) {
+  // Play audio implementation
+}
+```
+
+### Smart Recording (Stop on Silence)
+
+```typescript
+import { useVAD } from 'react-native-executorch';
+import { useState, useEffect, useRef } from 'react';
+
+function SmartRecorder() {
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBuffer, setAudioBuffer] = useState<Float32Array>(new Float32Array());
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const vad = useVAD({
+    model: {
+      modelSource: require('./models/vad.pte'),
+    },
+  });
+  
+  const SILENCE_THRESHOLD = 2000; // 2 seconds of silence to stop
+  
+  useEffect(() => {
+    if (!isRecording || !vad.isReady) return;
+    
+    const checkInterval = setInterval(async () => {
+      // Get recent 1-second buffer
+      const recentAudio = await getRecentAudioBuffer(1000);
+      
+      try {
+        const segments = await vad.forward(recentAudio);
+        
+        if (segments.length > 0) {
+          // Speech detected - reset silence timer
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }
+        } else {
+          // No speech - start/continue silence timer
+          if (!silenceTimerRef.current) {
+            silenceTimerRef.current = setTimeout(() => {
+              console.log('Stopping recording due to silence');
+              setIsRecording(false);
+            }, SILENCE_THRESHOLD);
+          }
+        }
+      } catch (error) {
+        console.error('VAD check failed:', error);
+      }
+    }, 500);
+    
+    return () => {
+      clearInterval(checkInterval);
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+    };
+  }, [isRecording, vad.isReady]);
+  
+  return (
+    <View>
+      <Button
+        title={isRecording ? 'Recording...' : 'Start Recording'}
+        onPress={() => setIsRecording(!isRecording)}
+      />
+      <Text>Will auto-stop after 2s of silence</Text>
+    </View>
+  );
+}
+
+function getRecentAudioBuffer(ms: number): Promise<Float32Array> {
+  // Implementation
+  return Promise.resolve(new Float32Array());
+}
+```
+
+### Voice Activity Visualization
+
+```typescript
+import { useVAD } from 'react-native-executorch';
+import { useState } from 'react';
+import Svg, { Rect } from 'react-native-svg';
+
+function VoiceActivityTimeline() {
+  const [segments, setSegments] = useState<any[]>([]);
+  const [duration, setDuration] = useState(0);
+  
+  const vad = useVAD({
+    model: {
+      modelSource: 'https://example.com/vad.pte',
+    },
+  });
+  
+  const analyzeAudio = async (waveform: Float32Array, sampleRate: number = 16000) => {
+    if (!vad.isReady) return;
+    
+    try {
+      const voiceSegments = await vad.forward(waveform);
+      setSegments(voiceSegments);
+      setDuration(waveform.length / sampleRate);
+    } catch (error) {
+      console.error('Analysis failed:', error);
+    }
+  };
+  
+  const renderTimeline = () => {
+    const width = 400;
+    const height = 50;
+    const scale = width / duration;
+    
+    return (
+      <Svg width={width} height={height}>
+        {/* Background */}
+        <Rect x={0} y={0} width={width} height={height} fill="#f0f0f0" />
+        
+        {/* Speech segments */}
+        {segments.map((seg, idx) => (
+          <Rect
+            key={idx}
+            x={seg.start * scale}
+            y={0}
+            width={(seg.end - seg.start) * scale}
+            height={height}
+            fill="green"
+            opacity={0.7}
+          />
+        ))}
+      </Svg>
+    );
+  };
+  
+  return (
+    <View>
+      <Text>Voice Activity Timeline:</Text>
+      {duration > 0 && renderTimeline()}
+      
+      <Text>Total duration: {duration.toFixed(2)}s</Text>
+      <Text>Speech duration: {
+        segments.reduce((sum, seg) => sum + (seg.end - seg.start), 0).toFixed(2)
+      }s</Text>
+    </View>
+  );
+}
+```
+
+## Notes
+
+<Info>
+  The VAD model automatically loads when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  For real-time detection, process audio in small chunks (0.5-1 second) for responsive results.
+</Warning>
+
+<Tip>
+  Combine VAD with speech-to-text to only transcribe speech portions, saving computation and improving accuracy.
+</Tip>
+
+## Common Use Cases
+
+1. **Smart Recording**: Auto-stop recording after silence
+2. **Speech Extraction**: Extract only speech portions from audio
+3. **Real-time Indicators**: Show when user is speaking
+4. **Audio Preprocessing**: Clean audio before transcription
+5. **Meeting Analysis**: Identify who spoke when
+
+## Performance Tips
+
+- Process audio in chunks rather than entire files
+- Use appropriate silence thresholds for your use case
+- Consider debouncing for real-time detection
+- Cache results for repeated analysis
+
+## See Also
+
+- [useSpeechToText](/api/hooks/use-speech-to-text) - Speech recognition
+- [useTextToSpeech](/api/hooks/use-text-to-speech) - Speech synthesis
+- [NLP Guide](/llm/voice-activity-detection) - VAD integration guide

@@ -1,0 +1,470 @@
+---
+title: 'useTextToSpeech'
+description: 'React hook for text-to-speech synthesis'
+icon: 'volume-high'
+---
+
+## Overview
+
+The `useTextToSpeech` hook manages a text-to-speech (TTS) model instance for converting text to natural-sounding speech audio. It supports both one-shot synthesis and streaming audio generation.
+
+## Import
+
+```typescript
+import { useTextToSpeech } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const tts = useTextToSpeech({ model, voice, preventLoad }: TextToSpeechProps): TextToSpeechType
+```
+
+## Parameters
+
+<ParamField path="model" type="KokoroConfig" required>
+  Model configuration
+  
+  <Expandable title="properties">
+    <ParamField path="type" type="'kokoro'" required>
+      Model type identifier
+    </ParamField>
+    
+    <ParamField path="durationPredictorSource" type="ResourceSource" required>
+      Source for duration predictor model binary
+    </ParamField>
+    
+    <ParamField path="synthesizerSource" type="ResourceSource" required>
+      Source for synthesizer model binary
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="voice" type="VoiceConfig" required>
+  Voice configuration
+  
+  <Expandable title="properties">
+    <ParamField path="lang" type="TextToSpeechLanguage" required>
+      Voice language (`'en-us'` or `'en-gb'`)
+    </ParamField>
+    
+    <ParamField path="voiceSource" type="ResourceSource" required>
+      Source for voice embedding binary
+    </ParamField>
+    
+    <ParamField path="extra" type="KokoroVoiceExtras">
+      Additional voice-specific resources
+      
+      <Expandable title="properties">
+        <ParamField path="taggerSource" type="ResourceSource">
+          Kokoro tagger model binary
+        </ParamField>
+        
+        <ParamField path="lexiconSource" type="ResourceSource">
+          Kokoro lexicon binary
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading when the hook mounts
+</ParamField>
+
+## Return Value
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the TTS model is loaded and ready to synthesize speech.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently generating audio.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Synthesizes speech from text in a single pass.
+  
+  ```typescript
+  forward(input: TextToSpeechInput): Promise<Float32Array>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="input" type="TextToSpeechInput" required>
+      Input object
+      
+      <Expandable title="properties">
+        <ParamField path="text" type="string" required>
+          Text to synthesize
+        </ParamField>
+        
+        <ParamField path="speed" type="number" default="1.0">
+          Speech speed multiplier (higher = faster)
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+  
+  Returns promise resolving to Float32Array of audio samples.
+</ResponseField>
+
+<ResponseField name="stream" type="function">
+  Streams generated audio incrementally.
+  
+  ```typescript
+  stream(input: TextToSpeechStreamingInput): Promise<void>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="input" type="TextToSpeechStreamingInput" required>
+      Streaming input with lifecycle callbacks
+      
+      <Expandable title="properties">
+        <ParamField path="text" type="string" required>
+          Text to synthesize
+        </ParamField>
+        
+        <ParamField path="speed" type="number" default="1.0">
+          Speech speed multiplier
+        </ParamField>
+        
+        <ParamField path="onBegin" type="() => void | Promise<void>">
+          Called when streaming begins
+        </ParamField>
+        
+        <ParamField path="onNext" type="(audio: Float32Array) => void | Promise<void>">
+          Called for each audio chunk
+        </ParamField>
+        
+        <ParamField path="onEnd" type="() => void | Promise<void>">
+          Called when streaming ends
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="streamStop" type="function">
+  Stops the currently active audio generation stream.
+  
+  ```typescript
+  streamStop(): void
+  ```
+</ResponseField>
+
+## Usage Examples
+
+### Basic Text-to-Speech
+
+```typescript
+import { useTextToSpeech } from 'react-native-executorch';
+import { useState } from 'react';
+import { Audio } from 'expo-av';
+
+function TextToSpeechDemo() {
+  const [text, setText] = useState('');
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  
+  const tts = useTextToSpeech({
+    model: {
+      type: 'kokoro',
+      durationPredictorSource: 'https://example.com/duration.pte',
+      synthesizerSource: 'https://example.com/synthesizer.pte',
+    },
+    voice: {
+      lang: 'en-us',
+      voiceSource: require('./voices/voice-en-us.bin'),
+      extra: {
+        taggerSource: require('./kokoro/tagger.bin'),
+        lexiconSource: require('./kokoro/lexicon.bin'),
+      },
+    },
+  });
+  
+  const speak = async () => {
+    if (!tts.isReady || !text) return;
+    
+    try {
+      const audioData = await tts.forward({ text });
+      
+      // Convert to playable audio
+      const { sound: newSound } = await Audio.Sound.createAsync({
+        uri: convertToWav(audioData),
+      });
+      
+      setSound(newSound);
+      await newSound.playAsync();
+    } catch (error) {
+      console.error('TTS failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {tts.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        placeholder="Enter text to speak..."
+        multiline
+      />
+      
+      <Button
+        title="Speak"
+        onPress={speak}
+        disabled={!tts.isReady || tts.isGenerating}
+      />
+    </View>
+  );
+}
+
+function convertToWav(audioData: Float32Array): string {
+  // Convert Float32Array to WAV file
+  // Implementation depends on your audio library
+  return '';
+}
+```
+
+### Streaming TTS for Real-time Playback
+
+```typescript
+import { useTextToSpeech } from 'react-native-executorch';
+import { useState } from 'react';
+import { AudioPlayer } from 'react-native-audio-streaming';
+
+function StreamingTTS() {
+  const [text, setText] = useState('');
+  const [audioPlayer] = useState(() => new AudioPlayer());
+  
+  const tts = useTextToSpeech({
+    model: {
+      type: 'kokoro',
+      durationPredictorSource: require('./models/duration.pte'),
+      synthesizerSource: require('./models/synthesizer.pte'),
+    },
+    voice: {
+      lang: 'en-us',
+      voiceSource: require('./voices/voice.bin'),
+      extra: {
+        taggerSource: require('./kokoro/tagger.bin'),
+        lexiconSource: require('./kokoro/lexicon.bin'),
+      },
+    },
+  });
+  
+  const speakStreaming = async () => {
+    if (!tts.isReady || !text) return;
+    
+    try {
+      await tts.stream({
+        text,
+        speed: 1.0,
+        onBegin: async () => {
+          console.log('Starting audio stream...');
+          await audioPlayer.start();
+        },
+        onNext: async (audioChunk) => {
+          // Feed chunk to audio player
+          await audioPlayer.writeAudio(audioChunk);
+        },
+        onEnd: async () => {
+          console.log('Stream complete');
+          await audioPlayer.finish();
+        },
+      });
+    } catch (error) {
+      console.error('Streaming TTS failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <TextInput value={text} onChangeText={setText} />
+      <Button title="Speak (Streaming)" onPress={speakStreaming} />
+    </View>
+  );
+}
+```
+
+### Variable Speech Speed
+
+```typescript
+import { useTextToSpeech } from 'react-native-executorch';
+import { useState } from 'react';
+import Slider from '@react-native-community/slider';
+
+function VariableSpeedTTS() {
+  const [text, setText] = useState('');
+  const [speed, setSpeed] = useState(1.0);
+  
+  const tts = useTextToSpeech({
+    model: {
+      type: 'kokoro',
+      durationPredictorSource: 'https://example.com/duration.pte',
+      synthesizerSource: 'https://example.com/synthesizer.pte',
+    },
+    voice: {
+      lang: 'en-gb',
+      voiceSource: 'https://example.com/voice-en-gb.bin',
+    },
+  });
+  
+  const speak = async () => {
+    if (!tts.isReady || !text) return;
+    
+    try {
+      const audioData = await tts.forward({ text, speed });
+      // Play audio
+      playAudio(audioData);
+    } catch (error) {
+      console.error('TTS failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <TextInput value={text} onChangeText={setText} />
+      
+      <Text>Speed: {speed.toFixed(2)}x</Text>
+      <Slider
+        value={speed}
+        onValueChange={setSpeed}
+        minimumValue={0.5}
+        maximumValue={2.0}
+        step={0.1}
+      />
+      
+      <Button title="Speak" onPress={speak} />
+    </View>
+  );
+}
+
+function playAudio(data: Float32Array) {
+  // Implementation
+}
+```
+
+### Read-Along Text Highlighter
+
+```typescript
+import { useTextToSpeech } from 'react-native-executorch';
+import { useState } from 'react';
+
+function ReadAlongApp() {
+  const [text, setText] = useState('The quick brown fox jumps over the lazy dog.');
+  const [highlightRange, setHighlightRange] = useState<[number, number] | null>(null);
+  
+  const tts = useTextToSpeech({
+    model: {
+      type: 'kokoro',
+      durationPredictorSource: require('./models/duration.pte'),
+      synthesizerSource: require('./models/synthesizer.pte'),
+    },
+    voice: {
+      lang: 'en-us',
+      voiceSource: require('./voices/voice.bin'),
+    },
+  });
+  
+  const readAloud = async () => {
+    if (!tts.isReady || !text) return;
+    
+    const words = text.split(' ');
+    let charPosition = 0;
+    
+    for (const word of words) {
+      const start = charPosition;
+      const end = start + word.length;
+      
+      setHighlightRange([start, end]);
+      
+      // Speak word
+      const audioData = await tts.forward({ text: word });
+      await playAndWait(audioData);
+      
+      charPosition = end + 1; // +1 for space
+    }
+    
+    setHighlightRange(null);
+  };
+  
+  const renderText = () => {
+    if (!highlightRange) return <Text>{text}</Text>;
+    
+    const [start, end] = highlightRange;
+    const before = text.substring(0, start);
+    const highlight = text.substring(start, end);
+    const after = text.substring(end);
+    
+    return (
+      <Text>
+        {before}
+        <Text style={{ backgroundColor: 'yellow' }}>{highlight}</Text>
+        {after}
+      </Text>
+    );
+  };
+  
+  return (
+    <View>
+      <TextInput value={text} onChangeText={setText} />
+      <Button title="Read Aloud" onPress={readAloud} />
+      <View style={{ padding: 20 }}>
+        {renderText()}
+      </View>
+    </View>
+  );
+}
+
+function playAndWait(audio: Float32Array): Promise<void> {
+  return new Promise((resolve) => {
+    // Play audio and resolve when done
+    setTimeout(resolve, 500); // Placeholder
+  });
+}
+```
+
+## Notes
+
+<Info>
+  The model and voice assets automatically load when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  For real-time playback, use the `stream` method with `onNext` callback to feed audio chunks to your audio player.
+</Warning>
+
+<Tip>
+  Adjust the `speed` parameter to create different voice characteristics - slower for emphasis, faster for quick narration.
+</Tip>
+
+## Supported Languages
+
+Currently supported:
+- `'en-us'`: American English
+- `'en-gb'`: British English
+
+## Performance Considerations
+
+- **Text Length**: Longer text takes more time to synthesize
+- **Streaming**: Use streaming for immediate playback start
+- **Speed Parameter**: Higher speeds generate audio faster but may affect quality
+
+## See Also
+
+- [useSpeechToText](/api/hooks/use-speech-to-text) - Speech recognition
+- [useVAD](/api/hooks/use-vad) - Voice activity detection
+- [NLP Guide](/llm/text-to-speech) - TTS integration guide

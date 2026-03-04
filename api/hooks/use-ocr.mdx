@@ -1,0 +1,515 @@
+---
+title: 'useOCR'
+description: 'React hook for Optical Character Recognition'
+icon: 'text-size'
+---
+
+## Overview
+
+The `useOCR` hook manages an OCR (Optical Character Recognition) instance for detecting and recognizing text in images. It combines text detection and recognition in a single pipeline.
+
+## Import
+
+```typescript
+import { useOCR } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const ocr = useOCR({ model, preventLoad }: OCRProps): OCRType
+```
+
+## Parameters
+
+<ParamField path="model" type="object" required>
+  Object containing model sources and configuration
+  
+  <Expandable title="properties">
+    <ParamField path="detectorSource" type="ResourceSource" required>
+      Source location of the text detector model binary (.pte)
+    </ParamField>
+    
+    <ParamField path="recognizerSource" type="ResourceSource" required>
+      Source location of the text recognizer model binary (.pte)
+    </ParamField>
+    
+    <ParamField path="language" type="OCRLanguage" required>
+      Language configuration for OCR (e.g., 'en', 'ch', 'pl', etc.)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading and downloading when the hook mounts
+</ParamField>
+
+## Return Value
+
+Returns an object with the following properties and methods:
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether both detector and recognizer models are loaded and ready to process images.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the OCR pipeline is currently processing an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Combined download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the models fail to load or encounter an error during OCR.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Executes the complete OCR pipeline (detection + recognition) on the provided image.
+  
+  ```typescript
+  forward(imageSource: string): Promise<OCRDetection[]>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="imageSource" type="string" required>
+      Image source as a file path, URI, or base64 string
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to an array of OCRDetection objects, each containing detected text, bounding box, and confidence score.
+</ResponseField>
+
+## Types
+
+### OCRDetection
+
+```typescript
+interface OCRDetection {
+  bbox: Point[];    // Bounding box vertices (4 points)
+  text: string;     // Recognized text
+  score: number;    // Confidence score (0-1)
+}
+```
+
+### Point
+
+```typescript
+interface Point {
+  x: number;
+  y: number;
+}
+```
+
+### OCRLanguage
+
+Supported languages include: `'en'`, `'ch'`, `'pl'`, and others based on available symbol sets.
+
+## Usage Examples
+
+### Basic Text Recognition
+
+```typescript
+import { useOCR } from 'react-native-executorch';
+import { useState } from 'react';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+function TextRecognizer() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [detections, setDetections] = useState<OCRDetection[]>([]);
+  
+  const ocr = useOCR({
+    model: {
+      detectorSource: 'https://huggingface.co/.../detector.pte',
+      recognizerSource: 'https://huggingface.co/.../recognizer.pte',
+      language: 'en',
+    },
+  });
+  
+  const recognizeText = async (uri: string) => {
+    if (!ocr.isReady) return;
+    
+    try {
+      const results = await ocr.forward(uri);
+      setDetections(results);
+      
+      console.log('Detected text blocks:', results.length);
+      results.forEach((det, idx) => {
+        console.log(`[${idx}] "${det.text}" (${(det.score * 100).toFixed(1)}%)`);
+      });
+    } catch (error) {
+      console.error('OCR failed:', error);
+    }
+  };
+  
+  const pickAndRecognize = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    if (result.assets?.[0]?.uri) {
+      const uri = result.assets[0].uri;
+      setImageUri(uri);
+      await recognizeText(uri);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {ocr.isReady ? 'Ready' : 'Loading...'}</Text>
+      <Text>Progress: {(ocr.downloadProgress * 100).toFixed(0)}%</Text>
+      
+      <Button
+        title="Pick Image & Recognize"
+        onPress={pickAndRecognize}
+        disabled={!ocr.isReady}
+      />
+      
+      {imageUri && (
+        <Image source={{ uri: imageUri }} style={{ width: 400, height: 400 }} />
+      )}
+      
+      {ocr.isGenerating && <ActivityIndicator />}
+      
+      <ScrollView>
+        {detections.map((det, idx) => (
+          <View key={idx} style={{ padding: 10, borderBottomWidth: 1 }}>
+            <Text style={{ fontWeight: 'bold' }}>{det.text}</Text>
+            <Text style={{ color: 'gray' }}>
+              Confidence: {(det.score * 100).toFixed(1)}%
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+### Drawing Bounding Boxes
+
+```typescript
+import { useOCR } from 'react-native-executorch';
+import { useState } from 'react';
+import Svg, { Polygon, Text as SvgText } from 'react-native-svg';
+
+function OCRVisualizer() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+  const [detections, setDetections] = useState<any[]>([]);
+  
+  const ocr = useOCR({
+    model: {
+      detectorSource: require('./models/detector.pte'),
+      recognizerSource: require('./models/recognizer.pte'),
+      language: 'en',
+    },
+  });
+  
+  const processImage = async (uri: string) => {
+    // Get image dimensions
+    Image.getSize(uri, (width, height) => {
+      setImageDimensions({ width, height });
+    });
+    
+    if (!ocr.isReady) return;
+    
+    try {
+      const results = await ocr.forward(uri);
+      setDetections(results);
+    } catch (error) {
+      console.error('OCR failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      {imageUri && (
+        <View>
+          <Image
+            source={{ uri: imageUri }}
+            style={{ width: 400, height: 400 }}
+          />
+          
+          <Svg
+            style={{ position: 'absolute', top: 0, left: 0 }}
+            width={400}
+            height={400}
+          >
+            {detections.map((det, idx) => {
+              const scaleX = 400 / imageDimensions.width;
+              const scaleY = 400 / imageDimensions.height;
+              
+              const points = det.bbox
+                .map(p => `${p.x * scaleX},${p.y * scaleY}`)
+                .join(' ');
+              
+              return (
+                <React.Fragment key={idx}>
+                  <Polygon
+                    points={points}
+                    stroke="red"
+                    strokeWidth="2"
+                    fill="none"
+                  />
+                  <SvgText
+                    x={det.bbox[0].x * scaleX}
+                    y={det.bbox[0].y * scaleY - 5}
+                    fill="red"
+                    fontSize="12"
+                    fontWeight="bold"
+                  >
+                    {det.text}
+                  </SvgText>
+                </React.Fragment>
+              );
+            })}
+          </Svg>
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Extract All Text
+
+```typescript
+import { useOCR } from 'react-native-executorch';
+import { useState } from 'react';
+import Clipboard from '@react-native-clipboard/clipboard';
+
+function TextExtractor() {
+  const [extractedText, setExtractedText] = useState('');
+  
+  const ocr = useOCR({
+    model: {
+      detectorSource: 'https://example.com/detector.pte',
+      recognizerSource: 'https://example.com/recognizer.pte',
+      language: 'en',
+    },
+  });
+  
+  const extractText = async (imageUri: string) => {
+    if (!ocr.isReady) return;
+    
+    try {
+      const detections = await ocr.forward(imageUri);
+      
+      // Sort by vertical position (top to bottom)
+      const sorted = detections.sort((a, b) => {
+        const avgYA = a.bbox.reduce((sum, p) => sum + p.y, 0) / a.bbox.length;
+        const avgYB = b.bbox.reduce((sum, p) => sum + p.y, 0) / b.bbox.length;
+        return avgYA - avgYB;
+      });
+      
+      // Concatenate all text
+      const fullText = sorted.map(det => det.text).join('\n');
+      setExtractedText(fullText);
+    } catch (error) {
+      console.error('Text extraction failed:', error);
+    }
+  };
+  
+  const copyToClipboard = () => {
+    Clipboard.setString(extractedText);
+  };
+  
+  return (
+    <View>
+      <Text style={{ fontWeight: 'bold' }}>Extracted Text:</Text>
+      <Text>{extractedText}</Text>
+      
+      <Button title="Copy to Clipboard" onPress={copyToClipboard} />
+    </View>
+  );
+}
+```
+
+### Multi-language Support
+
+```typescript
+import { useOCR, OCRLanguage } from 'react-native-executorch';
+import { useState } from 'react';
+
+function MultiLanguageOCR() {
+  const [language, setLanguage] = useState<OCRLanguage>('en');
+  const [detections, setDetections] = useState<any[]>([]);
+  
+  const ocr = useOCR({
+    model: {
+      detectorSource: require('./models/detector.pte'),
+      recognizerSource: require('./models/recognizer.pte'),
+      language: language,
+    },
+  });
+  
+  const languages: OCRLanguage[] = ['en', 'ch', 'pl'];
+  
+  return (
+    <View>
+      <Text>Select Language:</Text>
+      <View style={{ flexDirection: 'row' }}>
+        {languages.map((lang) => (
+          <Button
+            key={lang}
+            title={lang.toUpperCase()}
+            onPress={() => setLanguage(lang)}
+          />
+        ))}
+      </View>
+      
+      <Text>Current: {language}</Text>
+      <Text>Status: {ocr.isReady ? 'Ready' : 'Loading...'}</Text>
+    </View>
+  );
+}
+```
+
+### Filtering by Confidence
+
+```typescript
+import { useOCR } from 'react-native-executorch';
+import { useState } from 'react';
+
+function ConfidenceFilteredOCR() {
+  const [minConfidence, setMinConfidence] = useState(0.7);
+  const [allDetections, setAllDetections] = useState<any[]>([]);
+  const [filteredDetections, setFilteredDetections] = useState<any[]>([]);
+  
+  const ocr = useOCR({
+    model: {
+      detectorSource: 'https://example.com/detector.pte',
+      recognizerSource: 'https://example.com/recognizer.pte',
+      language: 'en',
+    },
+  });
+  
+  const processImage = async (imageUri: string) => {
+    if (!ocr.isReady) return;
+    
+    try {
+      const results = await ocr.forward(imageUri);
+      setAllDetections(results);
+      
+      // Filter by confidence threshold
+      const filtered = results.filter(det => det.score >= minConfidence);
+      setFilteredDetections(filtered);
+    } catch (error) {
+      console.error('OCR failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Minimum Confidence: {(minConfidence * 100).toFixed(0)}%</Text>
+      <Slider
+        value={minConfidence}
+        onValueChange={setMinConfidence}
+        minimumValue={0}
+        maximumValue={1}
+      />
+      
+      <Text>Total detections: {allDetections.length}</Text>
+      <Text>Filtered detections: {filteredDetections.length}</Text>
+      
+      {filteredDetections.map((det, idx) => (
+        <View key={idx}>
+          <Text>{det.text} - {(det.score * 100).toFixed(1)}%</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+```
+
+### Document Scanner
+
+```typescript
+import { useOCR } from 'react-native-executorch';
+import { useState } from 'react';
+import { Camera } from 'react-native-vision-camera';
+import { useRef } from 'react';
+
+function DocumentScanner() {
+  const cameraRef = useRef<Camera>(null);
+  const [scannedText, setScannedText] = useState<string[]>([]);
+  
+  const ocr = useOCR({
+    model: {
+      detectorSource: require('./models/detector.pte'),
+      recognizerSource: require('./models/recognizer.pte'),
+      language: 'en',
+    },
+  });
+  
+  const captureAndScan = async () => {
+    if (!cameraRef.current || !ocr.isReady) return;
+    
+    try {
+      const photo = await cameraRef.current.takePhoto();
+      const results = await ocr.forward(photo.path);
+      
+      const lines = results
+        .filter(det => det.score > 0.6)
+        .map(det => det.text);
+      
+      setScannedText(lines);
+    } catch (error) {
+      console.error('Scan failed:', error);
+    }
+  };
+  
+  return (
+    <View style={{ flex: 1 }}>
+      <Camera
+        ref={cameraRef}
+        style={{ flex: 1 }}
+        device={/* camera device */}
+        isActive={true}
+      />
+      
+      <Button
+        title="Scan Document"
+        onPress={captureAndScan}
+        disabled={!ocr.isReady || ocr.isGenerating}
+      />
+      
+      <ScrollView style={{ maxHeight: 200 }}>
+        {scannedText.map((line, idx) => (
+          <Text key={idx}>{line}</Text>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+## Notes
+
+<Info>
+  Both detector and recognizer models automatically load when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  OCR processing can be computationally intensive. Consider showing a loading indicator during processing.
+</Warning>
+
+<Tip>
+  For best results, use images with good lighting and clear, unobstructed text. Consider preprocessing images to improve contrast if needed.
+</Tip>
+
+## Performance Tips
+
+1. **Image Quality**: Higher quality images generally produce better results
+2. **Text Size**: Ensure text is large enough and not too small
+3. **Lighting**: Good, even lighting improves detection accuracy
+4. **Contrast**: High contrast between text and background works best
+5. **Orientation**: Text should be horizontal for best results
+
+## See Also
+
+- [useVerticalOCR](/api/hooks/use-vertical-ocr) - OCR for vertical text
+- [useClassification](/api/hooks/use-classification) - Image classification
+- [Computer Vision Guide](/computer-vision/ocr) - OCR integration guide

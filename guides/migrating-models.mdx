@@ -1,0 +1,551 @@
+---
+title: Migrating Models to ExecuTorch
+description: Convert existing PyTorch models to ExecuTorch format for mobile deployment
+---
+
+This guide explains how to convert existing PyTorch models to ExecuTorch's `.pte` format for use in React Native applications.
+
+## Overview
+
+Migrating models to ExecuTorch involves:
+
+1. Preparing your PyTorch model
+2. Exporting to ATEN dialect
+3. Converting to Edge dialect
+4. Applying optimizations (quantization, backend delegation)
+5. Generating the final `.pte` file
+6. Testing and validation
+
+## Prerequisites
+
+Install ExecuTorch and dependencies:
+
+```bash
+pip install executorch
+pip install torch torchvision
+```
+
+For Hugging Face models:
+```bash
+pip install optimum-executorch transformers
+```
+
+## Basic Migration Workflow
+
+### Step 1: Prepare Your Model
+
+Start with a PyTorch model in evaluation mode:
+
+```python
+import torch
+import torch.nn as nn
+
+# Load your existing model
+model = YourModel()
+model.load_state_dict(torch.load('model_weights.pth'))
+model.eval()
+
+# Disable gradient computation
+for param in model.parameters():
+    param.requires_grad = False
+```
+
+### Step 2: Create Example Inputs
+
+Define representative inputs matching your model's expected format:
+
+```python
+# For image models (batch_size, channels, height, width)
+example_inputs = (torch.randn(1, 3, 224, 224),)
+
+# For text models (batch_size, sequence_length)
+example_inputs = (torch.randint(0, 30000, (1, 512)),)
+
+# For multiple inputs
+example_inputs = (
+    torch.randn(1, 3, 224, 224),
+    torch.tensor([0])  # class index
+)
+```
+
+### Step 3: Export to ATEN Dialect
+
+```python
+from torch.export import export
+
+# Export model
+aten_dialect = export(
+    model,
+    example_inputs,
+)
+
+print("ATEN export successful")
+```
+
+### Step 4: Convert to Edge Dialect
+
+```python
+from executorch.exir import to_edge
+
+edge_program = to_edge(aten_dialect)
+print("Edge conversion successful")
+```
+
+### Step 5: Generate .pte File
+
+```python
+# Convert to ExecuTorch program
+executorch_program = edge_program.to_executorch()
+
+# Save to file
+with open("model.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+
+print("Model saved to model.pte")
+```
+
+## Complete Example: Image Classification
+
+Here's a complete example for a ResNet model:
+
+```python
+import torch
+import torchvision.models as models
+from torch.export import export
+from executorch.exir import to_edge
+
+# 1. Load pretrained model
+model = models.resnet18(pretrained=True)
+model.eval()
+
+# 2. Create example inputs
+example_inputs = (torch.randn(1, 3, 224, 224),)
+
+# 3. Export to ATEN
+print("Exporting to ATEN...")
+aten_dialect = export(model, example_inputs)
+
+# 4. Convert to Edge
+print("Converting to Edge...")
+edge_program = to_edge(aten_dialect)
+
+# 5. Export to ExecuTorch
+print("Generating .pte file...")
+executorch_program = edge_program.to_executorch()
+
+# 6. Save
+with open("resnet18.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+
+print("✓ Model exported to resnet18.pte")
+```
+
+## Migrating Hugging Face Models
+
+### Using optimum-executorch
+
+The easiest way to export Hugging Face models:
+
+```python
+from optimum.executorch import ExecuTorchModelForImageClassification
+
+# Export directly from model name
+model = ExecuTorchModelForImageClassification.from_pretrained(
+    "google/mobilenet_v2_1.0_224",
+    export=True,
+)
+
+# Save
+model.save_pretrained("./exported_mobilenet")
+# This creates mobilenet.pte in the directory
+```
+
+### Supported Task Types
+
+```python
+from optimum.executorch import (
+    ExecuTorchModelForImageClassification,
+    ExecuTorchModelForObjectDetection,
+    ExecuTorchModelForSemanticSegmentation,
+)
+
+# Image classification
+classifier = ExecuTorchModelForImageClassification.from_pretrained(
+    "microsoft/resnet-50",
+    export=True,
+)
+
+# Object detection
+detector = ExecuTorchModelForObjectDetection.from_pretrained(
+    "facebook/detr-resnet-50",
+    export=True,
+)
+```
+
+### Manual Hugging Face Export
+
+For more control:
+
+```python
+from transformers import AutoModel
+import torch
+from torch.export import export
+from executorch.exir import to_edge
+
+# Load model
+model = AutoModel.from_pretrained("bert-base-uncased")
+model.eval()
+
+# Prepare inputs
+input_ids = torch.randint(0, 30000, (1, 512))
+attention_mask = torch.ones(1, 512)
+
+example_inputs = {
+    "input_ids": input_ids,
+    "attention_mask": attention_mask,
+}
+
+# Export
+aten_dialect = export(model, (), kwargs=example_inputs)
+edge_program = to_edge(aten_dialect)
+executorch_program = edge_program.to_executorch()
+
+with open("bert.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+```
+
+## Adding Optimizations
+
+### Quantization
+
+Reduce model size and improve speed:
+
+```python
+import torch
+from torch.ao.quantization.quantize_pt2e import convert_pt2e, prepare_pt2e
+from torch.ao.quantization.quantizer.xnnpack_quantizer import (
+    get_symmetric_quantization_config,
+    XNNPACKQuantizer,
+)
+from torch.export import export
+from executorch.exir import to_edge
+
+# Setup quantization
+quantizer = XNNPACKQuantizer()
+quantization_config = get_symmetric_quantization_config(is_per_channel=True)
+quantizer.set_global(quantization_config)
+
+# Export and prepare for quantization
+model.eval()
+aten_dialect = export(model, example_inputs)
+prepared_model = prepare_pt2e(aten_dialect, quantizer)
+
+# Calibrate (optional but recommended)
+with torch.no_grad():
+    for sample in calibration_data:
+        prepared_model(sample)
+
+# Convert to quantized model
+quantized_model = convert_pt2e(prepared_model)
+
+# Export
+edge_program = to_edge(quantized_model)
+executorch_program = edge_program.to_executorch()
+
+with open("model_quantized.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+
+print("Quantized model exported")
+```
+
+### Backend Delegation (XNNPACK)
+
+```python
+from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+
+# Apply XNNPACK backend
+edge_program = to_edge(aten_dialect)
+edge_program = edge_program.to_backend(XnnpackPartitioner())
+executorch_program = edge_program.to_executorch()
+
+with open("model_xnnpack.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+```
+
+### Core ML Backend (iOS)
+
+```python
+from executorch.backends.apple.coreml.partition.coreml_partitioner import CoreMLPartitioner
+
+# Apply Core ML backend for iOS
+edge_program = to_edge(aten_dialect)
+edge_program = edge_program.to_backend(CoreMLPartitioner(
+    compute_precision="fp16",
+    compute_units="ALL",  # CPU, GPU, and Neural Engine
+))
+executorch_program = edge_program.to_executorch()
+
+with open("model_coreml.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+```
+
+### Combined: Quantization + XNNPACK
+
+```python
+from torch.ao.quantization.quantize_pt2e import convert_pt2e, prepare_pt2e
+from torch.ao.quantization.quantizer.xnnpack_quantizer import (
+    get_symmetric_quantization_config,
+    XNNPACKQuantizer,
+)
+from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+
+# Quantize
+quantizer = XNNPACKQuantizer()
+config = get_symmetric_quantization_config(is_per_channel=True)
+quantizer.set_global(config)
+
+aten_dialect = export(model, example_inputs)
+prepared = prepare_pt2e(aten_dialect, quantizer)
+quantized = convert_pt2e(prepared)
+
+# Apply XNNPACK
+edge_program = to_edge(quantized)
+edge_program = edge_program.to_backend(XnnpackPartitioner())
+
+# Export
+executorch_program = edge_program.to_executorch()
+with open("model_optimized.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+
+print("Optimized model with quantization and XNNPACK exported")
+```
+
+## Handling Dynamic Shapes
+
+For models that accept variable input sizes:
+
+```python
+from torch.export import Dim
+
+# Define dynamic dimensions
+batch = Dim("batch", min=1, max=32)
+seq_len = Dim("seq_len", min=1, max=512)
+
+# Specify dynamic shapes
+dynamic_shapes = {
+    "input_ids": {0: batch, 1: seq_len},
+    "attention_mask": {0: batch, 1: seq_len},
+}
+
+# Export with dynamic shapes
+aten_dialect = export(
+    model,
+    example_inputs,
+    dynamic_shapes=dynamic_shapes,
+)
+
+# Continue with normal export process
+edge_program = to_edge(aten_dialect)
+executorch_program = edge_program.to_executorch()
+```
+
+## Testing Exported Models
+
+### Validate with Python
+
+Test your `.pte` file before using in React Native:
+
+```python
+from executorch.extension.pybindings.portable_lib import (
+    _load_for_executorch
+)
+import torch
+
+# Load exported model
+module = _load_for_executorch("model.pte")
+
+# Test inference
+test_input = torch.randn(1, 3, 224, 224)
+output = module.forward((test_input,))
+
+print("Output shape:", output[0].shape)
+print("Output:", output[0][:5])  # Print first 5 values
+```
+
+### Compare with Original Model
+
+```python
+import torch
+from executorch.extension.pybindings.portable_lib import _load_for_executorch
+
+# Original model
+original_model = YourModel()
+original_model.eval()
+
+# Exported model
+exported_model = _load_for_executorch("model.pte")
+
+# Test input
+test_input = torch.randn(1, 3, 224, 224)
+
+# Run both
+with torch.no_grad():
+    original_output = original_model(test_input)
+exported_output = exported_model.forward((test_input,))[0]
+
+# Compare
+diff = torch.abs(original_output - exported_output).max()
+print(f"Max difference: {diff.item()}")
+
+if diff < 1e-5:
+    print("✓ Outputs match!")
+else:
+    print("⚠ Outputs differ")
+```
+
+## Common Migration Issues
+
+### Unsupported Operations
+
+**Problem**: Model contains ops not supported by ExecuTorch
+
+**Solution**: 
+```python
+try:
+    edge_program = to_edge(aten_dialect)
+except Exception as e:
+    print(f"Unsupported ops: {e}")
+    # Check ExecuTorch operator support docs
+    # Consider replacing unsupported ops
+```
+
+### Shape Inference Errors
+
+**Problem**: Dynamic shapes cause issues
+
+**Solution**: Use explicit dynamic shape constraints or static shapes:
+```python
+# Option 1: Static shapes
+example_inputs = (torch.randn(1, 3, 224, 224),)  # Fixed size
+
+# Option 2: Explicit dynamic constraints
+from torch.export import Dim
+batch = Dim("batch", min=1, max=8)  # Bounded dynamic dim
+```
+
+### Memory Issues During Export
+
+**Problem**: Large model causes OOM during export
+
+**Solution**:
+```python
+import torch
+import gc
+
+# Clear cache
+torch.cuda.empty_cache()
+gc.collect()
+
+# Export with smaller batch size
+example_inputs = (torch.randn(1, 3, 224, 224),)  # Use batch=1
+```
+
+## Model-Specific Migration Guides
+
+### Vision Models (ResNet, EfficientNet, MobileNet)
+
+```python
+import torchvision.models as models
+
+model = models.mobilenet_v2(pretrained=True)
+model.eval()
+
+example_inputs = (torch.randn(1, 3, 224, 224),)
+
+aten_dialect = export(model, example_inputs)
+edge_program = to_edge(aten_dialect)
+executorch_program = edge_program.to_executorch()
+
+with open("mobilenet_v2.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+```
+
+### Object Detection Models
+
+```python
+import torchvision.models.detection as detection
+
+model = detection.fasterrcnn_resnet50_fpn(pretrained=True)
+model.eval()
+
+# Object detection models often need specific preprocessing
+example_inputs = (torch.randn(1, 3, 640, 640),)
+
+aten_dialect = export(model, example_inputs)
+edge_program = to_edge(aten_dialect)
+executorch_program = edge_program.to_executorch()
+
+with open("faster_rcnn.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+```
+
+### Text Models (BERT, GPT)
+
+```python
+from transformers import BertModel
+
+model = BertModel.from_pretrained("bert-base-uncased")
+model.eval()
+
+input_ids = torch.randint(0, 30000, (1, 128))
+attention_mask = torch.ones(1, 128)
+
+aten_dialect = export(model, (input_ids, attention_mask))
+edge_program = to_edge(aten_dialect)
+executorch_program = edge_program.to_executorch()
+
+with open("bert.pte", "wb") as f:
+    f.write(executorch_program.buffer)
+```
+
+## Using Migrated Models in React Native
+
+Once you have your `.pte` file:
+
+```typescript
+import { useExecutorchModule } from 'react-native-executorch';
+
+function MyComponent() {
+  const module = useExecutorchModule({
+    modelSource: 'https://your-server.com/model.pte',
+  });
+
+  const runInference = async () => {
+    if (!module.isReady) return;
+
+    const input = /* prepare tensor */;
+    const output = await module.forward([input]);
+    console.log('Output:', output);
+  };
+
+  return /* Your UI */;
+}
+```
+
+## Best Practices
+
+1. **Test Before Migrating**: Ensure your PyTorch model works correctly
+2. **Use Representative Inputs**: Example inputs should match real usage
+3. **Validate Outputs**: Compare exported model with original
+4. **Start Simple**: Test basic export before adding optimizations
+5. **Quantize for Production**: Use quantization to reduce size and improve speed
+6. **Check Operator Support**: Verify all ops are supported before export
+7. **Document Your Process**: Keep export scripts for reproducibility
+8. **Version Control Models**: Track model versions and export configs
+
+## Next Steps
+
+- Learn about [Performance Optimization](/advanced/performance-optimization)
+- Review [Custom Models](/advanced/custom-models) guide
+- Check [Debugging](/advanced/debugging) for troubleshooting
+- See [ExecuTorch Export Tutorial](https://pytorch.org/executorch/stable/tutorials/export-to-executorch-tutorial.html)

@@ -1,0 +1,108 @@
+---
+title: Introduction
+description: Run AI models on-device in React Native apps with ExecuTorch
+---
+
+React Native ExecuTorch provides a declarative way to run AI models on-device using React Native, powered by **ExecuTorch**. It offers out-of-the-box support for a wide range of LLMs, computer vision models, and more.
+
+[**ExecuTorch**](https://executorch.ai), developed by Meta, is a novel framework allowing AI model execution on devices like mobile phones or microcontrollers.
+
+## What is React Native ExecuTorch?
+
+React Native ExecuTorch bridges the gap between React Native and native platform capabilities, enabling developers to efficiently run local AI models on mobile devices. This can be achieved without the need for extensive expertise in native programming or machine learning.
+
+<Card
+  title="Real-world Example: Private Mind"
+  icon="mobile"
+  href="https://privatemind.swmansion.com/"
+>
+  React Native ExecuTorch powers Private Mind, a privacy-first mobile AI app available on App Store and Google Play.
+</Card>
+
+## Key Features
+
+- **Declarative API**: Use React hooks to integrate AI models seamlessly
+- **Wide Model Support**: LLMs, computer vision, speech-to-text, text-to-speech, and more
+- **On-Device Processing**: Run AI models locally for privacy and offline capability
+- **Ready-Made Models**: Pre-configured models available on [HuggingFace](https://huggingface.co/software-mansion)
+- **TypeScript First**: Full type safety with TypeScript support
+
+## Supported Platforms
+
+React Native ExecuTorch has specific minimum version requirements:
+
+<Warning>
+  React Native ExecuTorch requires the **New React Native Architecture**.
+</Warning>
+
+| Platform | Minimum Version |
+|----------|----------------|
+| **iOS** | 17.0 |
+| **Android** | 13 (API level 33) |
+| **React Native** | 0.81 |
+
+## Available Models
+
+React Native ExecuTorch provides ready-to-use models across multiple categories:
+
+### Large Language Models (LLMs)
+- **Llama 3.2**: 1B and 3B variants (original, QLoRA, SpinQuant)
+- **Qwen 2.5 & 3**: Various sizes from 0.5B to 4B
+- **Hammer 2.1**: 0.5B, 1.5B, and 3B variants
+- **SmolLM2**: 135M, 360M, and 1.7B variants
+- **Phi-4 Mini**: 4B parameter model
+- **LFM2.5**: 1.2B instruct model
+
+### Computer Vision
+- **Image Classification**: EfficientNet V2
+- **Object Detection**: SSDLite, RF-DETR
+- **Semantic Segmentation**: DeepLab V3, FCN, LRASPP, Selfie Segmentation
+- **Style Transfer**: Candy, Mosaic, Rain Princess, Udnie
+- **Image Embeddings**: CLIP ViT
+
+### Speech & Audio
+- **Speech-to-Text**: Whisper (Tiny, Base, Small variants)
+- **Text-to-Speech**: Kokoro TTS
+- **Voice Activity Detection**: FSMN-VAD
+
+### Other Models
+- **Text Embeddings**: MiniLM, MPNet, CLIP
+- **Image Generation**: BK-SDM-Tiny
+- **OCR**: Text detection and recognition
+
+## Architecture Overview
+
+React Native ExecuTorch consists of:
+
+1. **React Native Package** (`react-native-executorch`): Core library with hooks and modules
+2. **Resource Fetchers**: Platform-specific packages for model downloading
+   - `@react-native-executorch/expo-resource-fetcher` for Expo projects
+   - `@react-native-executorch/bare-resource-fetcher` for bare React Native
+3. **Native Modules**: Bridge to ExecuTorch framework on iOS and Android
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Install React Native ExecuTorch in your project
+  </Card>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Build your first AI-powered feature in minutes
+  </Card>
+</CardGroup>
+
+## License
+
+React Native ExecuTorch is licensed under the MIT License.
+
+## Credits
+
+Created and maintained by [Software Mansion](https://swmansion.com).

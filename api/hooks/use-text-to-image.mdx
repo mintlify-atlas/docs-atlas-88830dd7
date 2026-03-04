@@ -1,0 +1,585 @@
+---
+title: 'useTextToImage'
+description: 'React hook for generating images from text prompts'
+icon: 'wand-magic-sparkles'
+---
+
+## Overview
+
+The `useTextToImage` hook manages a text-to-image diffusion model pipeline for generating images from text prompts. It uses a multi-stage pipeline including tokenizer, encoder, UNet, decoder, and scheduler components.
+
+## Import
+
+```typescript
+import { useTextToImage } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const textToImage = useTextToImage({
+  model,
+  inferenceCallback,
+  preventLoad
+}: TextToImageProps): TextToImageType
+```
+
+## Parameters
+
+<ParamField path="model" type="object" required>
+  Object containing all required model sources for the diffusion pipeline
+  
+  <Expandable title="properties">
+    <ParamField path="tokenizerSource" type="ResourceSource" required>
+      Source for the text tokenizer binary/config
+    </ParamField>
+    
+    <ParamField path="schedulerSource" type="ResourceSource" required>
+      Source for the diffusion scheduler binary/config
+    </ParamField>
+    
+    <ParamField path="encoderSource" type="ResourceSource" required>
+      Source for the text encoder model binary
+    </ParamField>
+    
+    <ParamField path="unetSource" type="ResourceSource" required>
+      Source for the UNet (noise predictor) model binary
+    </ParamField>
+    
+    <ParamField path="decoderSource" type="ResourceSource" required>
+      Source for the VAE decoder model binary
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="inferenceCallback" type="function">
+  Optional callback triggered after each diffusion inference step
+  
+  ```typescript
+  inferenceCallback?: (stepIdx: number) => void
+  ```
+  
+  Useful for updating progress indicators during generation.
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading and downloading when the hook mounts
+</ParamField>
+
+## Return Value
+
+Returns an object with the following properties and methods:
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the entire diffusion pipeline is loaded and ready for generation.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently generating an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Combined download progress of all pipeline components as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if any pipeline component fails to load or encounters an error.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="generate" type="function">
+  Runs the diffusion pipeline to generate an image from a text prompt.
+  
+  ```typescript
+  generate(
+    input: string,
+    imageSize?: number,
+    numSteps?: number,
+    seed?: number
+  ): Promise<string>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="input" type="string" required>
+      The text prompt describing the desired image
+    </ParamField>
+    
+    <ParamField path="imageSize" type="number">
+      Target width and height of generated image (e.g., 512 for 512x512). Defaults to model's standard size if omitted.
+    </ParamField>
+    
+    <ParamField path="numSteps" type="number">
+      Number of denoising steps. More steps = higher quality but slower generation.
+    </ParamField>
+    
+    <ParamField path="seed" type="number">
+      Random seed for reproducible generation. Should be a positive integer.
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to a string containing the generated image (base64 or file URI).
+</ResponseField>
+
+<ResponseField name="interrupt" type="function">
+  Interrupts the currently active image generation process.
+  
+  ```typescript
+  interrupt(): void
+  ```
+</ResponseField>
+
+## Usage Examples
+
+### Basic Image Generation
+
+```typescript
+import { useTextToImage } from 'react-native-executorch';
+import { useState } from 'react';
+
+function ImageGenerator() {
+  const [prompt, setPrompt] = useState('');
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  
+  const textToImage = useTextToImage({
+    model: {
+      tokenizerSource: 'https://huggingface.co/.../tokenizer.pte',
+      schedulerSource: 'https://huggingface.co/.../scheduler.pte',
+      encoderSource: 'https://huggingface.co/.../encoder.pte',
+      unetSource: 'https://huggingface.co/.../unet.pte',
+      decoderSource: 'https://huggingface.co/.../decoder.pte',
+    },
+  });
+  
+  const generateImage = async () => {
+    if (!textToImage.isReady || !prompt.trim()) return;
+    
+    try {
+      const imageUri = await textToImage.generate(prompt);
+      setGeneratedImage(imageUri);
+      console.log('Image generated successfully!');
+    } catch (error) {
+      console.error('Generation failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {textToImage.isReady ? 'Ready' : 'Loading pipeline...'}</Text>
+      <Text>Progress: {(textToImage.downloadProgress * 100).toFixed(0)}%</Text>
+      
+      <TextInput
+        value={prompt}
+        onChangeText={setPrompt}
+        placeholder="Enter a prompt (e.g., 'a cat on the moon')..."
+        multiline
+      />
+      
+      <Button
+        title="Generate Image"
+        onPress={generateImage}
+        disabled={!textToImage.isReady || textToImage.isGenerating}
+      />
+      
+      {textToImage.isGenerating && (
+        <View>
+          <ActivityIndicator />
+          <Text>Generating image...</Text>
+        </View>
+      )}
+      
+      {generatedImage && (
+        <Image
+          source={{ uri: generatedImage }}
+          style={{ width: 512, height: 512 }}
+        />
+      )}
+    </View>
+  );
+}
+```
+
+### With Progress Tracking
+
+```typescript
+import { useTextToImage } from 'react-native-executorch';
+import { useState } from 'react';
+
+function ImageGeneratorWithProgress() {
+  const [prompt, setPrompt] = useState('');
+  const [currentStep, setCurrentStep] = useState(0);
+  const [totalSteps] = useState(20);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  
+  const textToImage = useTextToImage({
+    model: {
+      tokenizerSource: require('./models/tokenizer.pte'),
+      schedulerSource: require('./models/scheduler.pte'),
+      encoderSource: require('./models/encoder.pte'),
+      unetSource: require('./models/unet.pte'),
+      decoderSource: require('./models/decoder.pte'),
+    },
+    inferenceCallback: (step) => {
+      setCurrentStep(step);
+      console.log(`Step ${step} of ${totalSteps}`);
+    },
+  });
+  
+  const generateImage = async () => {
+    if (!textToImage.isReady) return;
+    
+    setCurrentStep(0);
+    
+    try {
+      const imageUri = await textToImage.generate(prompt, 512, totalSteps);
+      setGeneratedImage(imageUri);
+    } catch (error) {
+      console.error('Generation failed:', error);
+    }
+  };
+  
+  const progress = totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0;
+  
+  return (
+    <View>
+      <TextInput
+        value={prompt}
+        onChangeText={setPrompt}
+        placeholder="Enter your prompt..."
+      />
+      
+      <Button title="Generate" onPress={generateImage} />
+      
+      {textToImage.isGenerating && (
+        <View>
+          <Text>Step {currentStep} of {totalSteps}</Text>
+          <ProgressBar progress={progress / 100} />
+          <Text>{progress.toFixed(0)}% complete</Text>
+        </View>
+      )}
+      
+      {generatedImage && (
+        <Image source={{ uri: generatedImage }} style={{ width: 512, height: 512 }} />
+      )}
+    </View>
+  );
+}
+```
+
+### Different Image Sizes
+
+```typescript
+import { useTextToImage } from 'react-native-executorch';
+import { useState } from 'react';
+
+function MultiSizeGenerator() {
+  const [prompt, setPrompt] = useState('');
+  const [selectedSize, setSelectedSize] = useState(512);
+  const [images, setImages] = useState<Record<number, string>>({});
+  
+  const textToImage = useTextToImage({
+    model: {
+      tokenizerSource: 'https://example.com/tokenizer.pte',
+      schedulerSource: 'https://example.com/scheduler.pte',
+      encoderSource: 'https://example.com/encoder.pte',
+      unetSource: 'https://example.com/unet.pte',
+      decoderSource: 'https://example.com/decoder.pte',
+    },
+  });
+  
+  const sizes = [256, 512, 768, 1024];
+  
+  const generateWithSize = async (size: number) => {
+    if (!textToImage.isReady || !prompt) return;
+    
+    try {
+      const imageUri = await textToImage.generate(prompt, size, 20);
+      setImages({ ...images, [size]: imageUri });
+    } catch (error) {
+      console.error(`Generation failed for size ${size}:`, error);
+    }
+  };
+  
+  return (
+    <View>
+      <TextInput value={prompt} onChangeText={setPrompt} />
+      
+      <Text>Select Size:</Text>
+      <View style={{ flexDirection: 'row' }}>
+        {sizes.map((size) => (
+          <Button
+            key={size}
+            title={`${size}x${size}`}
+            onPress={() => {
+              setSelectedSize(size);
+              generateWithSize(size);
+            }}
+          />
+        ))}
+      </View>
+      
+      <ScrollView horizontal>
+        {Object.entries(images).map(([size, uri]) => (
+          <View key={size} style={{ margin: 10 }}>
+            <Text>{size}x{size}</Text>
+            <Image
+              source={{ uri }}
+              style={{
+                width: parseInt(size) / 2,
+                height: parseInt(size) / 2,
+              }}
+            />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+### Reproducible Generation with Seeds
+
+```typescript
+import { useTextToImage } from 'react-native-executorch';
+import { useState } from 'react';
+
+function SeededGenerator() {
+  const [prompt, setPrompt] = useState('');
+  const [seed, setSeed] = useState(42);
+  const [variations, setVariations] = useState<string[]>([]);
+  
+  const textToImage = useTextToImage({
+    model: {
+      tokenizerSource: require('./models/tokenizer.pte'),
+      schedulerSource: require('./models/scheduler.pte'),
+      encoderSource: require('./models/encoder.pte'),
+      unetSource: require('./models/unet.pte'),
+      decoderSource: require('./models/decoder.pte'),
+    },
+  });
+  
+  const generateVariations = async (count: number = 4) => {
+    if (!textToImage.isReady || !prompt) return;
+    
+    const results: string[] = [];
+    
+    for (let i = 0; i < count; i++) {
+      try {
+        const imageUri = await textToImage.generate(
+          prompt,
+          512,
+          20,
+          seed + i // Different seed for each variation
+        );
+        results.push(imageUri);
+      } catch (error) {
+        console.error(`Variation ${i} failed:`, error);
+      }
+    }
+    
+    setVariations(results);
+  };
+  
+  const regenerateSame = async () => {
+    // Using same seed produces same image
+    if (!textToImage.isReady || !prompt) return;
+    
+    try {
+      const imageUri = await textToImage.generate(prompt, 512, 20, seed);
+      console.log('Regenerated with same seed');
+    } catch (error) {
+      console.error('Regeneration failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <TextInput value={prompt} onChangeText={setPrompt} />
+      
+      <TextInput
+        value={seed.toString()}
+        onChangeText={(text) => setSeed(parseInt(text) || 0)}
+        keyboardType="numeric"
+        placeholder="Seed"
+      />
+      
+      <Button title="Generate 4 Variations" onPress={() => generateVariations(4)} />
+      <Button title="Regenerate Same" onPress={regenerateSame} />
+      
+      <ScrollView horizontal>
+        {variations.map((uri, idx) => (
+          <View key={idx} style={{ margin: 5 }}>
+            <Text>Seed: {seed + idx}</Text>
+            <Image source={{ uri }} style={{ width: 200, height: 200 }} />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+### Interrupt Long Generation
+
+```typescript
+import { useTextToImage } from 'react-native-executorch';
+import { useState } from 'react';
+
+function InterruptibleGenerator() {
+  const [prompt, setPrompt] = useState('');
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  
+  const textToImage = useTextToImage({
+    model: {
+      tokenizerSource: 'https://example.com/tokenizer.pte',
+      schedulerSource: 'https://example.com/scheduler.pte',
+      encoderSource: 'https://example.com/encoder.pte',
+      unetSource: 'https://example.com/unet.pte',
+      decoderSource: 'https://example.com/decoder.pte',
+    },
+  });
+  
+  const generateImage = async () => {
+    if (!textToImage.isReady) return;
+    
+    try {
+      // Long generation with many steps
+      const imageUri = await textToImage.generate(prompt, 512, 50);
+      setGeneratedImage(imageUri);
+    } catch (error) {
+      console.error('Generation failed or interrupted:', error);
+    }
+  };
+  
+  const cancelGeneration = () => {
+    if (textToImage.isGenerating) {
+      textToImage.interrupt();
+      console.log('Generation interrupted');
+    }
+  };
+  
+  return (
+    <View>
+      <TextInput value={prompt} onChangeText={setPrompt} />
+      
+      {!textToImage.isGenerating ? (
+        <Button title="Generate (50 steps)" onPress={generateImage} />
+      ) : (
+        <Button title="Cancel" onPress={cancelGeneration} />
+      )}
+      
+      {textToImage.isGenerating && (
+        <Text>Generating... Tap Cancel to stop</Text>
+      )}
+      
+      {generatedImage && (
+        <Image source={{ uri: generatedImage }} style={{ width: 512, height: 512 }} />
+      )}
+    </View>
+  );
+}
+```
+
+### Gallery Builder
+
+```typescript
+import { useTextToImage } from 'react-native-executorch';
+import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+function ImageGallery() {
+  const [prompt, setPrompt] = useState('');
+  const [gallery, setGallery] = useState<Array<{ prompt: string; uri: string }>>([]);
+  
+  const textToImage = useTextToImage({
+    model: {
+      tokenizerSource: require('./models/tokenizer.pte'),
+      schedulerSource: require('./models/scheduler.pte'),
+      encoderSource: require('./models/encoder.pte'),
+      unetSource: require('./models/unet.pte'),
+      decoderSource: require('./models/decoder.pte'),
+    },
+  });
+  
+  const addToGallery = async () => {
+    if (!textToImage.isReady || !prompt) return;
+    
+    try {
+      const imageUri = await textToImage.generate(prompt);
+      const newItem = { prompt, uri: imageUri };
+      const updatedGallery = [newItem, ...gallery];
+      
+      setGallery(updatedGallery);
+      
+      // Save to persistent storage
+      await AsyncStorage.setItem('imageGallery', JSON.stringify(updatedGallery));
+      
+      setPrompt(''); // Clear prompt
+    } catch (error) {
+      console.error('Failed to add to gallery:', error);
+    }
+  };
+  
+  const loadGallery = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('imageGallery');
+      if (stored) {
+        setGallery(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('Failed to load gallery:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Button title="Load Gallery" onPress={loadGallery} />
+      
+      <TextInput value={prompt} onChangeText={setPrompt} />
+      <Button title="Generate & Add" onPress={addToGallery} />
+      
+      <Text>Gallery ({gallery.length} images)</Text>
+      
+      <ScrollView>
+        {gallery.map((item, idx) => (
+          <View key={idx} style={{ marginBottom: 20 }}>
+            <Text>{item.prompt}</Text>
+            <Image source={{ uri: item.uri }} style={{ width: 300, height: 300 }} />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+## Notes
+
+<Info>
+  All pipeline components (tokenizer, scheduler, encoder, UNet, decoder) automatically load when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  Image generation is computationally intensive and can take several seconds to minutes depending on image size, number of steps, and device capabilities.
+</Warning>
+
+<Tip>
+  Use fewer denoising steps (10-20) for faster generation during development. Increase to 50+ for final quality images.
+</Tip>
+
+## Quality vs Speed Trade-offs
+
+| Steps | Quality | Speed | Best For |
+|-------|---------|-------|----------|
+| 10-15 | Low | Fast | Testing, previews |
+| 20-30 | Good | Medium | General use |
+| 40-50 | High | Slow | Final outputs |
+| 50+ | Highest | Very Slow | Professional quality |
+
+## See Also
+
+- [useStyleTransfer](/api/hooks/use-style-transfer) - Style transfer
+- [useImageEmbeddings](/api/hooks/use-image-embeddings) - Image embeddings
+- [Computer Vision Guide](/computer-vision/text-to-image) - Text-to-image guide

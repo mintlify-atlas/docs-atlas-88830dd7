@@ -1,0 +1,151 @@
+---
+title: Speech & Audio Overview
+description: Process speech and audio on-device with React Native ExecuTorch
+---
+
+React Native ExecuTorch provides powerful on-device speech and audio processing capabilities through three core features:
+
+## Core Features
+
+### Speech to Text (STT)
+
+Convert spoken audio into text using on-device Whisper models. Supports both single-pass transcription and streaming modes with real-time results.
+
+- **Multilingual support**: 96+ languages with automatic language detection
+- **Streaming transcription**: Real-time audio processing with committed and non-committed results
+- **Word-level timestamps**: Detailed timing information when verbose mode is enabled
+- **Audio format**: Requires 16kHz mono audio as Float32Array
+
+[Learn more about Speech to Text](/speech/speech-to-text)
+
+### Text to Speech (TTS)
+
+Generate natural-sounding speech from text using the Kokoro TTS model. Supports both complete audio generation and streaming playback.
+
+- **Multiple voices**: English (US and GB) with customizable voice embeddings
+- **Speed control**: Adjustable speech rate for different use cases
+- **Streaming mode**: Start playback before full synthesis completes
+- **Audio output**: Returns 22kHz mono audio as Float32Array
+
+[Learn more about Text to Speech](/speech/text-to-speech)
+
+### Voice Activity Detection (VAD)
+
+Detect speech segments in audio streams with precise timestamp boundaries. Essential for building voice-activated features and efficient audio processing.
+
+- **Segment detection**: Identifies start and end times of speech activity
+- **Low latency**: Fast on-device processing for real-time applications
+- **Audio format**: Requires 16kHz mono audio as Float32Array
+- **Timestamp precision**: Returns segments in seconds
+
+[Learn more about Voice Activity Detection](/speech/voice-activity-detection)
+
+## Audio Format Requirements
+
+All speech and audio models require audio in a specific format:
+
+- **Sample rate**: 16kHz (except TTS output which is 22kHz)
+- **Channels**: Mono (single channel)
+- **Data type**: Float32Array with values normalized between -1.0 and 1.0
+- **Buffer format**: Contiguous samples in time order
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Voice Assistant" icon="microphone">
+    Combine VAD, STT, and TTS to build a complete voice assistant that listens, understands, and responds.
+  </Card>
+  
+  <Card title="Live Transcription" icon="closed-captioning">
+    Use streaming STT with VAD to provide real-time captions for meetings, lectures, or media.
+  </Card>
+  
+  <Card title="Audio Books" icon="book-open">
+    Generate natural-sounding narration from text content with speed control.
+  </Card>
+  
+  <Card title="Voice Commands" icon="waveform">
+    Detect when users speak and transcribe commands for hands-free interaction.
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+### Audio Preprocessing
+
+- Always resample audio to 16kHz before processing
+- Convert stereo audio to mono by averaging channels
+- Normalize audio samples to the range [-1.0, 1.0]
+- Remove DC offset and apply appropriate filtering
+
+### Memory Management
+
+- Reuse Float32Array buffers when possible to reduce allocations
+- Process audio in chunks for long recordings
+- Clean up resources when components unmount
+- Monitor download progress for large model files
+
+### Performance Optimization
+
+- Use streaming modes for real-time requirements
+- Batch audio processing when latency is not critical
+- Leverage VAD to process only speech segments
+- Cache models to avoid repeated downloads
+
+## Model Downloads
+
+All speech models support automatic downloading from remote sources:
+
+```typescript
+import { useSpeechToText } from 'react-native-executorch';
+
+const { isReady, downloadProgress } = useSpeechToText({
+  model: {
+    isMultilingual: true,
+    encoderSource: 'https://example.com/whisper-encoder.pte',
+    decoderSource: 'https://example.com/whisper-decoder.pte',
+    tokenizerSource: 'https://example.com/whisper-tokenizer.json',
+  },
+});
+
+// Monitor download progress
+console.log(`Download: ${(downloadProgress * 100).toFixed(0)}%`);
+```
+
+## Error Handling
+
+All speech hooks provide error states for handling failures:
+
+```typescript
+const { error, isReady } = useSpeechToText({ model });
+
+if (error) {
+  console.error('Failed to load model:', error.message);
+  // Handle specific error codes
+  switch (error.code) {
+    case 'MODULE_NOT_LOADED':
+      // Model not ready yet
+      break;
+    case 'DOWNLOAD_INTERRUPTED':
+      // Network issue during download
+      break;
+    // ... handle other cases
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Speech to Text" icon="microphone-lines" href="/speech/speech-to-text">
+    Convert audio to text
+  </Card>
+  
+  <Card title="Text to Speech" icon="volume-high" href="/speech/text-to-speech">
+    Generate spoken audio
+  </Card>
+  
+  <Card title="Voice Activity Detection" icon="waveform-lines" href="/speech/voice-activity-detection">
+    Detect speech segments
+  </Card>
+</CardGroup>

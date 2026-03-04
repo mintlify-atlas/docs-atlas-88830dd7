@@ -1,0 +1,749 @@
+---
+title: Bare React Native Setup
+description: Complete guide to setting up React Native ExecuTorch in bare React Native projects
+---
+
+This guide walks you through setting up React Native ExecuTorch in a bare React Native project (created without Expo).
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- Node.js 18 or later
+- React Native development environment set up ([React Native CLI Setup](https://reactnative.dev/docs/environment-setup))
+- iOS 17.0+ or Android 13+ device/emulator
+- Xcode 14+ (for iOS development)
+- Android Studio (for Android development)
+- At least 4GB of RAM on your device for LLMs
+
+**Important**: React Native ExecuTorch requires the [New Architecture](https://reactnative.dev/architecture/landing-page).
+
+## Minimum Version Requirements
+
+- iOS: 17.0+
+- Android: API level 13+
+- React Native: 0.81+
+
+## Step 1: Create or Update React Native Project
+
+### Create a New Project
+
+```bash
+npx @react-native-community/cli@latest init MyAIApp
+cd MyAIApp
+```
+
+### Update Existing Project
+
+Ensure you're on React Native 0.81 or later:
+
+```bash
+cd your-react-native-project
+# Check version in package.json
+```
+
+## Step 2: Install Dependencies
+
+Install React Native ExecuTorch and bare resource fetcher:
+
+```bash
+yarn add react-native-executorch
+yarn add @react-native-executorch/bare-resource-fetcher
+yarn add @dr.pogodin/react-native-fs @kesha-antonov/react-native-background-downloader
+```
+
+Or with npm:
+
+```bash
+npm install react-native-executorch
+npm install @react-native-executorch/bare-resource-fetcher
+npm install @dr.pogodin/react-native-fs @kesha-antonov/react-native-background-downloader
+```
+
+## Step 3: Link Native Dependencies
+
+### iOS Setup
+
+Install CocoaPods dependencies:
+
+```bash
+cd ios
+pod install
+cd ..
+```
+
+If you encounter issues, try cleaning and reinstalling:
+
+```bash
+cd ios
+rm -rf Pods Podfile.lock
+pod install
+cd ..
+```
+
+### Android Setup
+
+The Android dependencies should link automatically through autolinking. If you encounter issues, verify your `android/build.gradle` includes:
+
+```gradle
+allprojects {
+    repositories {
+        // ... other repositories
+        maven {
+            // For @kesha-antonov/react-native-background-downloader
+            url "$rootDir/../node_modules/@kesha-antonov/react-native-background-downloader/android/libs"
+        }
+    }
+}
+```
+
+## Step 4: Configure Native Dependencies
+
+### Configure react-native-fs
+
+No additional configuration needed. The library is ready to use after installation.
+
+See the [react-native-fs documentation](https://github.com/birdofpreyru/react-native-fs#getting-started) for advanced configuration.
+
+### Configure react-native-background-downloader
+
+#### iOS Configuration
+
+Add background modes to your `ios/YourApp/Info.plist`:
+
+```xml
+<key>UIBackgroundModes</key>
+<array>
+  <string>fetch</string>
+  <string>processing</string>
+</array>
+```
+
+#### Android Configuration
+
+Add permissions to `android/app/src/main/AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+```
+
+See the [background-downloader documentation](https://github.com/kesha-antonov/react-native-background-downloader#bare-react-native-projects) for more details.
+
+## Step 5: Enable New Architecture
+
+React Native ExecuTorch requires the New Architecture.
+
+### iOS (New Architecture)
+
+Edit `ios/Podfile`:
+
+```ruby
+# Enable New Architecture
+:fabric_enabled => true
+```
+
+Then reinstall pods:
+
+```bash
+cd ios
+rm -rf Pods Podfile.lock
+pod install
+cd ..
+```
+
+### Android (New Architecture)
+
+Edit `android/gradle.properties`:
+
+```properties
+# Enable New Architecture
+newArchEnabled=true
+```
+
+## Step 6: Initialize Resource Fetcher
+
+Update your app's entry point (usually `index.js` or `App.tsx`):
+
+```typescript
+import { useEffect } from 'react';
+import { initExecutorch } from 'react-native-executorch';
+import { BareResourceFetcher } from '@react-native-executorch/bare-resource-fetcher';
+
+function App() {
+  useEffect(() => {
+    // Initialize resource fetcher once at app startup
+    initExecutorch({
+      resourceFetcher: BareResourceFetcher,
+    });
+  }, []);
+
+  return (
+    // Your app content
+  );
+}
+
+export default App;
+```
+
+## Step 7: Run Your First Model
+
+Create a component to test model loading:
+
+```typescript
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  Button,
+  StyleSheet,
+  ScrollView,
+} from 'react-native';
+import { useLLM, LLAMA3_2_1B, Message } from 'react-native-executorch';
+
+function ChatDemo() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'system', content: 'You are a helpful assistant' },
+  ]);
+
+  const handleAskQuestion = async () => {
+    const question = 'What is React Native?';
+    const updatedMessages = [
+      ...messages,
+      { role: 'user', content: question },
+    ];
+    setMessages(updatedMessages);
+
+    try {
+      await llm.generate(updatedMessages);
+      console.log('AI Response:', llm.response);
+    } catch (error) {
+      console.error('Generation error:', error);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>React Native ExecuTorch Demo</Text>
+
+      {!llm.isReady && (
+        <View style={styles.loadingContainer}>
+          <Text>Loading model...</Text>
+          <Text>Progress: {Math.round(llm.downloadProgress * 100)}%</Text>
+        </View>
+      )}
+
+      {llm.error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {llm.error.message}</Text>
+        </View>
+      )}
+
+      {llm.isReady && (
+        <View style={styles.readyContainer}>
+          <Text style={styles.readyText}>Model is ready!</Text>
+          <Button
+            title={llm.isGenerating ? 'Generating...' : 'Ask Question'}
+            onPress={handleAskQuestion}
+            disabled={llm.isGenerating}
+          />
+        </View>
+      )}
+
+      {llm.response && (
+        <View style={styles.responseContainer}>
+          <Text style={styles.responseLabel}>AI Response:</Text>
+          <Text style={styles.responseText}>{llm.response}</Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    padding: 20,
+    backgroundColor: '#fff',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  loadingContainer: {
+    padding: 20,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  readyContainer: {
+    marginVertical: 20,
+  },
+  readyText: {
+    color: 'green',
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  errorContainer: {
+    padding: 20,
+    backgroundColor: '#ffe0e0',
+    borderRadius: 8,
+  },
+  errorText: {
+    color: 'red',
+  },
+  responseContainer: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#e8f4f8',
+    borderRadius: 8,
+  },
+  responseLabel: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  responseText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+});
+
+export default ChatDemo;
+```
+
+## Step 8: Build and Run
+
+### iOS
+
+```bash
+npx react-native run-ios
+```
+
+Or open `ios/YourApp.xcworkspace` in Xcode and build from there.
+
+**Note**: Test on physical devices for accurate performance. Simulators may not reflect real-world behavior.
+
+### Android
+
+Start Metro bundler:
+```bash
+npx react-native start
+```
+
+In a new terminal, run:
+```bash
+npx react-native run-android
+```
+
+**Important**: For LLM testing, increase emulator RAM to 4GB+ in AVD Manager.
+
+## Using BareResourceFetcher Features
+
+### Loading Models from Different Sources
+
+```typescript
+import { useLLM } from 'react-native-executorch';
+
+// 1. From remote URL
+const llm1 = useLLM({
+  model: {
+    modelSource: 'https://huggingface.co/your-model/model.pte',
+    tokenizerSource: 'https://huggingface.co/your-model/tokenizer.bin',
+    tokenizerConfigSource: 'https://huggingface.co/your-model/tokenizer_config.json',
+  },
+});
+
+// 2. From local assets
+const llm2 = useLLM({
+  model: {
+    modelSource: require('./assets/model.pte'),
+    tokenizerSource: require('./assets/tokenizer.bin'),
+    tokenizerConfigSource: require('./assets/tokenizer_config.json'),
+  },
+});
+
+// 3. From local filesystem
+const llm3 = useLLM({
+  model: {
+    modelSource: 'file:///path/to/model.pte',
+    tokenizerSource: 'file:///path/to/tokenizer.bin',
+    tokenizerConfigSource: 'file:///path/to/tokenizer_config.json',
+  },
+});
+```
+
+### Managing Downloads
+
+```typescript
+import { BareResourceFetcher } from '@react-native-executorch/bare-resource-fetcher';
+
+// Download with progress tracking and background support
+const downloadModel = async () => {
+  const modelUrl = 'https://example.com/model.pte';
+
+  try {
+    const paths = await BareResourceFetcher.fetch(
+      (progress) => {
+        console.log(`Download progress: ${Math.round(progress * 100)}%`);
+      },
+      modelUrl
+    );
+    console.log('Downloaded to:', paths);
+  } catch (error) {
+    console.error('Download failed:', error);
+  }
+};
+
+// Pause download
+await BareResourceFetcher.pauseFetching(modelUrl);
+
+// Resume download
+await BareResourceFetcher.resumeFetching(modelUrl);
+
+// Cancel download
+await BareResourceFetcher.cancelFetching(modelUrl);
+```
+
+Note: Background downloads continue even when the app is backgrounded, thanks to `react-native-background-downloader`.
+
+### Managing Storage
+
+```typescript
+import { BareResourceFetcher } from '@react-native-executorch/bare-resource-fetcher';
+
+// List all downloaded files
+const files = await BareResourceFetcher.listDownloadedFiles();
+console.log('Downloaded files:', files);
+
+// List only model files (.pte)
+const models = await BareResourceFetcher.listDownloadedModels();
+console.log('Model files:', models);
+
+// Check total size
+const totalSize = await BareResourceFetcher.getFilesTotalSize(
+  'https://model1.pte',
+  'https://model2.pte'
+);
+console.log(`Total size: ${totalSize / 1024 / 1024} MB`);
+
+// Delete unused models
+await BareResourceFetcher.deleteResources('https://old-model.pte');
+```
+
+## File Storage Location
+
+BareResourceFetcher stores files in:
+
+- **iOS**: `{DocumentDirectory}/react-native-executorch/`
+- **Android**: `{DocumentDirectory}/react-native-executorch/`
+
+Files persist across app restarts but are deleted when the app is uninstalled.
+
+## Platform-Specific Configuration
+
+### iOS: Increase Memory Limit
+
+For large models, you may need to increase the memory limit in Xcode:
+
+1. Open `ios/YourApp.xcworkspace`
+2. Select your target
+3. Go to "Signing & Capabilities"
+4. Add "Increased Memory Limit" capability (if available)
+
+### Android: Increase Heap Size
+
+Edit `android/app/src/main/AndroidManifest.xml`:
+
+```xml
+<application
+  android:name=".MainApplication"
+  android:largeHeap="true"
+  ...>
+</application>
+```
+
+Edit `android/gradle.properties`:
+
+```properties
+org.gradle.jvmargs=-Xmx4096m -XX:MaxPermSize=512m
+```
+
+## Troubleshooting
+
+### Native Module Not Found
+
+If you see "Native module not found" errors:
+
+1. Clean and rebuild:
+
+**iOS:**
+```bash
+cd ios
+rm -rf Pods Podfile.lock
+pod install
+cd ..
+npx react-native run-ios
+```
+
+**Android:**
+```bash
+cd android
+./gradlew clean
+cd ..
+npx react-native run-android
+```
+
+2. Reset Metro cache:
+```bash
+npx react-native start --reset-cache
+```
+
+### Resource Fetcher Not Initialized
+
+Error: `ResourceFetcherAdapterNotInitialized`
+
+**Solution**: Ensure `initExecutorch()` is called before using any hooks:
+
+```typescript
+import { initExecutorch } from 'react-native-executorch';
+import { BareResourceFetcher } from '@react-native-executorch/bare-resource-fetcher';
+
+initExecutorch({
+  resourceFetcher: BareResourceFetcher,
+});
+```
+
+### Background Download Not Working
+
+If background downloads aren't working:
+
+**iOS**: Verify `UIBackgroundModes` in `Info.plist`
+
+**Android**: Check permissions in `AndroidManifest.xml`
+
+### New Architecture Issues
+
+If you encounter architecture-related errors:
+
+1. Verify `newArchEnabled=true` in `android/gradle.properties`
+2. Verify `:fabric_enabled => true` in `ios/Podfile`
+3. Clean and rebuild both platforms
+
+## Example: Complete Chat Application
+
+Here's a complete chat application example:
+
+```typescript
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+} from 'react-native';
+import { useLLM, LLAMA3_2_1B, Message } from 'react-native-executorch';
+
+function ChatApp() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+  const [input, setInput] = useState('');
+  const [displayMessages, setDisplayMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    if (llm.messageHistory.length > 0) {
+      setDisplayMessages(llm.messageHistory);
+    }
+  }, [llm.messageHistory]);
+
+  const handleSend = async () => {
+    if (!input.trim() || !llm.isReady || llm.isGenerating) return;
+
+    const userMessage = input;
+    setInput('');
+
+    // Show user message immediately
+    setDisplayMessages(prev => [
+      ...prev,
+      { role: 'user', content: userMessage },
+    ]);
+
+    try {
+      await llm.sendMessage(userMessage);
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
+  };
+
+  const renderMessage = ({ item }: { item: Message }) => (
+    <View
+      style={[
+        styles.messageBubble,
+        item.role === 'user' ? styles.userBubble : styles.aiBubble,
+      ]}
+    >
+      <Text style={styles.messageRole}>
+        {item.role === 'user' ? 'You' : 'AI'}
+      </Text>
+      <Text style={styles.messageText}>{item.content}</Text>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>AI Chat</Text>
+        {!llm.isReady && (
+          <Text style={styles.headerStatus}>
+            Loading model... {Math.round(llm.downloadProgress * 100)}%
+          </Text>
+        )}
+        {llm.error && (
+          <Text style={styles.headerError}>Error: {llm.error.message}</Text>
+        )}
+      </View>
+
+      <FlatList
+        data={displayMessages}
+        renderItem={renderMessage}
+        keyExtractor={(_, index) => index.toString()}
+        contentContainerStyle={styles.messageList}
+        inverted={false}
+      />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.textInput}
+            value={input}
+            onChangeText={setInput}
+            placeholder="Type your message..."
+            editable={llm.isReady && !llm.isGenerating}
+            multiline
+            maxLength={500}
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!llm.isReady || llm.isGenerating || !input.trim()) &&
+                styles.sendButtonDisabled,
+            ]}
+            onPress={handleSend}
+            disabled={!llm.isReady || llm.isGenerating || !input.trim()}
+          >
+            <Text style={styles.sendButtonText}>
+              {llm.isGenerating ? '•••' : 'Send'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#f8f9fa',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  headerStatus: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  headerError: {
+    fontSize: 12,
+    color: '#d32f2f',
+    marginTop: 4,
+  },
+  messageList: {
+    padding: 16,
+  },
+  messageBubble: {
+    maxWidth: '75%',
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#007AFF',
+  },
+  aiBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e8e8e8',
+  },
+  messageRole: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginBottom: 4,
+    opacity: 0.7,
+  },
+  messageText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    backgroundColor: '#ffffff',
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d0d0d0',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    maxHeight: 100,
+    fontSize: 14,
+  },
+  sendButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#cccccc',
+  },
+  sendButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+});
+
+export default ChatApp;
+```
+
+## Next Steps
+
+- Explore [available models](https://huggingface.co/software-mansion)
+- Learn about [Performance Optimization](/advanced/performance-optimization)
+- Understand [Memory Management](/advanced/memory-management)
+- Check the [Troubleshooting Guide](/guides/troubleshooting)
+- Learn about [Custom Models](/advanced/custom-models)

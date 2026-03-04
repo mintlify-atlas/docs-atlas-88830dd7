@@ -1,0 +1,448 @@
+---
+title: 'useTokenizer'
+description: 'React hook for managing a tokenizer instance'
+icon: 'text'
+---
+
+## Overview
+
+The `useTokenizer` hook manages a tokenizer instance for encoding text to token IDs and decoding token IDs back to text. It's useful for text preprocessing, analyzing token counts, and understanding model inputs.
+
+## Import
+
+```typescript
+import { useTokenizer } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const tokenizer = useTokenizer({ tokenizer, preventLoad }: TokenizerProps): TokenizerType
+```
+
+## Parameters
+
+<ParamField path="tokenizer" type="object" required>
+  Object containing tokenizer source
+  
+  <Expandable title="properties">
+    <ParamField path="tokenizerSource" type="ResourceSource" required>
+      Source location of the tokenizer JSON file
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic tokenizer loading and downloading when the hook mounts
+</ParamField>
+
+## Return Value
+
+Returns an object with the following properties and methods:
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the tokenizer has successfully loaded and is ready for use.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the tokenizer is currently processing data.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the tokenizer fails to load or encounters an error during processing.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="encode" type="function">
+  Converts a string into an array of token IDs.
+  
+  ```typescript
+  encode(text: string): Promise<number[]>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="text" type="string" required>
+      The input text string to tokenize
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to an array of token IDs.
+</ResponseField>
+
+<ResponseField name="decode" type="function">
+  Converts an array of token IDs into a string.
+  
+  ```typescript
+  decode(tokens: number[], skipSpecialTokens?: boolean): Promise<string>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="tokens" type="number[]" required>
+      Array of token IDs to decode
+    </ParamField>
+    
+    <ParamField path="skipSpecialTokens" type="boolean">
+      If true, special tokens (BOS, EOS, etc.) are skipped during decoding
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to the decoded text string.
+</ResponseField>
+
+<ResponseField name="getVocabSize" type="function">
+  Returns the size of the tokenizer's vocabulary.
+  
+  ```typescript
+  getVocabSize(): Promise<number>
+  ```
+  
+  Returns a promise that resolves to the vocabulary size.
+</ResponseField>
+
+<ResponseField name="idToToken" type="function">
+  Returns the token string associated with the given ID.
+  
+  ```typescript
+  idToToken(id: number): Promise<string>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="id" type="number" required>
+      The numeric token ID
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to the token string.
+</ResponseField>
+
+<ResponseField name="tokenToId" type="function">
+  Returns the ID associated with the given token string.
+  
+  ```typescript
+  tokenToId(token: string): Promise<number>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="token" type="string" required>
+      The token string
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to the token ID.
+</ResponseField>
+
+## Usage Examples
+
+### Basic Encoding and Decoding
+
+```typescript
+import { useTokenizer } from 'react-native-executorch';
+import { useEffect, useState } from 'react';
+
+function TokenizerDemo() {
+  const [text, setText] = useState('Hello, world!');
+  const [tokens, setTokens] = useState<number[]>([]);
+  const [decodedText, setDecodedText] = useState('');
+  
+  const tokenizer = useTokenizer({
+    tokenizer: {
+      tokenizerSource: 'https://huggingface.co/.../tokenizer.json',
+    },
+  });
+  
+  const handleEncode = async () => {
+    if (!tokenizer.isReady) return;
+    
+    try {
+      const encoded = await tokenizer.encode(text);
+      setTokens(encoded);
+      console.log('Token IDs:', encoded);
+    } catch (error) {
+      console.error('Encoding failed:', error);
+    }
+  };
+  
+  const handleDecode = async () => {
+    if (!tokenizer.isReady || tokens.length === 0) return;
+    
+    try {
+      const decoded = await tokenizer.decode(tokens, true);
+      setDecodedText(decoded);
+      console.log('Decoded text:', decoded);
+    } catch (error) {
+      console.error('Decoding failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {tokenizer.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        placeholder="Enter text to tokenize"
+      />
+      
+      <Button
+        title="Encode"
+        onPress={handleEncode}
+        disabled={!tokenizer.isReady}
+      />
+      
+      <Text>Tokens: {JSON.stringify(tokens)}</Text>
+      <Text>Token count: {tokens.length}</Text>
+      
+      <Button
+        title="Decode"
+        onPress={handleDecode}
+        disabled={!tokenizer.isReady || tokens.length === 0}
+      />
+      
+      <Text>Decoded: {decodedText}</Text>
+    </View>
+  );
+}
+```
+
+### Token Count Calculator
+
+```typescript
+import { useTokenizer } from 'react-native-executorch';
+import { useState } from 'react';
+
+function TokenCounter() {
+  const [text, setText] = useState('');
+  const [count, setCount] = useState(0);
+  
+  const tokenizer = useTokenizer({
+    tokenizer: {
+      tokenizerSource: require('./tokenizer.json'),
+    },
+  });
+  
+  const countTokens = async (input: string) => {
+    if (!tokenizer.isReady) return;
+    
+    try {
+      const tokens = await tokenizer.encode(input);
+      setCount(tokens.length);
+    } catch (error) {
+      console.error('Token counting failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <TextInput
+        value={text}
+        onChangeText={(value) => {
+          setText(value);
+          countTokens(value);
+        }}
+        multiline
+        placeholder="Enter text to count tokens..."
+      />
+      
+      <Text>Token count: {count}</Text>
+      <Text>Character count: {text.length}</Text>
+    </View>
+  );
+}
+```
+
+### Vocabulary Inspector
+
+```typescript
+import { useTokenizer } from 'react-native-executorch';
+import { useEffect, useState } from 'react';
+
+function VocabularyInspector() {
+  const [vocabSize, setVocabSize] = useState(0);
+  const [tokenId, setTokenId] = useState('');
+  const [tokenString, setTokenString] = useState('');
+  
+  const tokenizer = useTokenizer({
+    tokenizer: {
+      tokenizerSource: 'https://example.com/tokenizer.json',
+    },
+  });
+  
+  useEffect(() => {
+    const loadVocabInfo = async () => {
+      if (!tokenizer.isReady) return;
+      
+      try {
+        const size = await tokenizer.getVocabSize();
+        setVocabSize(size);
+      } catch (error) {
+        console.error('Failed to get vocab size:', error);
+      }
+    };
+    
+    loadVocabInfo();
+  }, [tokenizer.isReady]);
+  
+  const lookupToken = async (id: number) => {
+    try {
+      const token = await tokenizer.idToToken(id);
+      setTokenString(token);
+    } catch (error) {
+      console.error('Token lookup failed:', error);
+    }
+  };
+  
+  const lookupId = async (token: string) => {
+    try {
+      const id = await tokenizer.tokenToId(token);
+      setTokenId(id.toString());
+    } catch (error) {
+      console.error('ID lookup failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Vocabulary size: {vocabSize}</Text>
+      
+      <TextInput
+        placeholder="Enter token ID"
+        keyboardType="numeric"
+        onChangeText={(value) => {
+          const id = parseInt(value);
+          if (!isNaN(id)) lookupToken(id);
+        }}
+      />
+      <Text>Token: {tokenString}</Text>
+      
+      <TextInput
+        placeholder="Enter token string"
+        onChangeText={lookupId}
+      />
+      <Text>ID: {tokenId}</Text>
+    </View>
+  );
+}
+```
+
+### Decode with Special Tokens
+
+```typescript
+import { useTokenizer } from 'react-native-executorch';
+import { useState } from 'react';
+
+function SpecialTokensDemo() {
+  const [tokens] = useState([1, 15043, 29892, 3186, 29991, 2]); // Example tokens
+  const [withSpecial, setWithSpecial] = useState('');
+  const [withoutSpecial, setWithoutSpecial] = useState('');
+  
+  const tokenizer = useTokenizer({
+    tokenizer: {
+      tokenizerSource: require('./tokenizer.json'),
+    },
+  });
+  
+  useEffect(() => {
+    const decodeTokens = async () => {
+      if (!tokenizer.isReady) return;
+      
+      try {
+        // Decode with special tokens
+        const decoded1 = await tokenizer.decode(tokens, false);
+        setWithSpecial(decoded1);
+        
+        // Decode without special tokens
+        const decoded2 = await tokenizer.decode(tokens, true);
+        setWithoutSpecial(decoded2);
+      } catch (error) {
+        console.error('Decoding failed:', error);
+      }
+    };
+    
+    decodeTokens();
+  }, [tokenizer.isReady]);
+  
+  return (
+    <View>
+      <Text>Tokens: {JSON.stringify(tokens)}</Text>
+      <Text>With special tokens: "{withSpecial}"</Text>
+      <Text>Without special tokens: "{withoutSpecial}"</Text>
+    </View>
+  );
+}
+```
+
+## Error Handling
+
+```typescript
+import { useTokenizer } from 'react-native-executorch';
+import { useEffect } from 'react';
+
+function TokenizerWithErrorHandling() {
+  const tokenizer = useTokenizer({
+    tokenizer: {
+      tokenizerSource: 'https://example.com/tokenizer.json',
+    },
+  });
+  
+  useEffect(() => {
+    if (tokenizer.error) {
+      console.error('Tokenizer error:', tokenizer.error.message);
+      console.error('Error code:', tokenizer.error.code);
+    }
+  }, [tokenizer.error]);
+  
+  const safeEncode = async (text: string) => {
+    if (!tokenizer.isReady) {
+      throw new Error('Tokenizer is not ready');
+    }
+    
+    if (tokenizer.isGenerating) {
+      throw new Error('Tokenizer is busy');
+    }
+    
+    try {
+      return await tokenizer.encode(text);
+    } catch (error) {
+      console.error('Encoding failed:', error);
+      throw error;
+    }
+  };
+  
+  return (
+    <View>
+      {tokenizer.error && (
+        <Text style={{ color: 'red' }}>
+          Error: {tokenizer.error.message}
+        </Text>
+      )}
+    </View>
+  );
+}
+```
+
+## Notes
+
+<Info>
+  The tokenizer automatically loads when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  Do not call tokenizer methods while `isGenerating` is true. Each method will throw an error if called during processing.
+</Warning>
+
+<Tip>
+  Use the tokenizer to calculate token counts for LLM inputs and manage context windows effectively.
+</Tip>
+
+## See Also
+
+- [useLLM](/api/hooks/use-llm) - Large Language Model hook
+- [useTextEmbeddings](/api/hooks/use-text-embeddings) - Text embeddings hook

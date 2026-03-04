@@ -1,0 +1,476 @@
+---
+title: Semantic Search
+description: Build semantic search functionality using text embeddings
+---
+
+Semantic search finds content based on meaning rather than exact keyword matches. This guide shows how to implement semantic search using text embeddings.
+
+## How Semantic Search Works
+
+1. **Pre-compute embeddings** for your content database
+2. **Generate embedding** for the search query
+3. **Calculate similarity** between query and database embeddings
+4. **Rank results** by similarity score
+
+## Complete Example
+
+Here's a full implementation of a semantic search feature:
+
+```tsx
+import { useState, useEffect } from 'react';
+import { 
+  View, 
+  TextInput, 
+  Text, 
+  FlatList, 
+  TouchableOpacity 
+} from 'react-native';
+import { useTextEmbeddings, ALL_MINILM_L6_V2 } from 'react-native-executorch';
+
+function SemanticSearchDemo() {
+  const model = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+  
+  const [query, setQuery] = useState('');
+  const [database, setDatabase] = useState<{
+    text: string;
+    embedding: Float32Array;
+  }[]>([]);
+  const [results, setResults] = useState<{
+    text: string;
+    similarity: number;
+  }[]>([]);
+
+  // Pre-compute embeddings for database
+  useEffect(() => {
+    const initializeDatabase = async () => {
+      if (!model.isReady) return;
+
+      const items = [
+        'The weather is lovely today.',
+        "It's so sunny outside!",
+        'He drove to the stadium.',
+        'The cat sleeps on the couch.',
+        'Machine learning is fascinating.',
+      ];
+
+      const embeddings = [];
+      for (const text of items) {
+        const embedding = await model.forward(text);
+        embeddings.push({ text, embedding });
+      }
+
+      setDatabase(embeddings);
+    };
+
+    initializeDatabase();
+  }, [model.isReady]);
+
+  // Perform semantic search
+  const handleSearch = async () => {
+    if (!model.isReady || !query.trim()) return;
+
+    try {
+      // Generate query embedding
+      const queryEmbedding = await model.forward(query);
+
+      // Calculate similarity scores
+      const scored = database.map(({ text, embedding }) => ({
+        text,
+        similarity: dotProduct(queryEmbedding, embedding),
+      }));
+
+      // Sort by similarity (descending)
+      scored.sort((a, b) => b.similarity - a.similarity);
+
+      // Take top results
+      setResults(scored.slice(0, 3));
+    } catch (error) {
+      console.error('Search error:', error);
+    }
+  };
+
+  return (
+    <View>
+      <Text>Status: {model.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <TextInput
+        placeholder="Enter search query..."
+        value={query}
+        onChangeText={setQuery}
+      />
+      
+      <TouchableOpacity onPress={handleSearch}>
+        <Text>Search</Text>
+      </TouchableOpacity>
+
+      <FlatList
+        data={results}
+        keyExtractor={(item, index) => index.toString()}
+        renderItem={({ item }) => (
+          <View>
+            <Text>{item.text}</Text>
+            <Text>Similarity: {item.similarity.toFixed(3)}</Text>
+          </View>
+        )}
+      />
+    </View>
+  );
+}
+
+// Similarity calculation
+function dotProduct(a: Float32Array, b: Float32Array): number {
+  if (a.length !== b.length) {
+    throw new Error('Vectors must have the same length');
+  }
+  
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    sum += a[i] * b[i];
+  }
+  return sum;
+}
+```
+
+## Similarity Calculation
+
+### Dot Product
+
+The dot product measures the similarity between two vectors. Higher values indicate greater similarity:
+
+```typescript
+function dotProduct(a: Float32Array, b: Float32Array): number {
+  if (a.length !== b.length) {
+    throw new Error('Vectors must have the same length');
+  }
+  
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    sum += a[i] * b[i];
+  }
+  return sum;
+}
+```
+
+### Cosine Similarity
+
+Cosine similarity normalizes vectors to focus on angle rather than magnitude:
+
+```typescript
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  const dotProd = dotProduct(a, b);
+  const normA = Math.sqrt(dotProduct(a, a));
+  const normB = Math.sqrt(dotProduct(b, b));
+  return dotProd / (normA * normB);
+}
+```
+
+<Note>
+  Models like MiniLM produce normalized embeddings, so dot product and cosine similarity are equivalent.
+</Note>
+
+## Advanced Features
+
+### Caching Embeddings
+
+Cache embeddings to avoid recomputing them:
+
+```tsx
+function useEmbeddingCache() {
+  const model = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+  const [cache, setCache] = useState<Map<string, Float32Array>>(new Map());
+
+  const getEmbedding = async (text: string): Promise<Float32Array> => {
+    // Check cache first
+    if (cache.has(text)) {
+      return cache.get(text)!;
+    }
+
+    // Generate and cache
+    const embedding = await model.forward(text);
+    setCache(prev => new Map(prev).set(text, embedding));
+    return embedding;
+  };
+
+  return { getEmbedding, isReady: model.isReady };
+}
+```
+
+### Dynamic Database Updates
+
+Add new items to your searchable database:
+
+```tsx
+function DynamicSearch() {
+  const model = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+  const [database, setDatabase] = useState<Array<{
+    text: string;
+    embedding: Float32Array;
+  }>>([]);
+
+  const addItem = async (text: string) => {
+    if (!model.isReady || !text.trim()) return;
+
+    try {
+      const embedding = await model.forward(text);
+      setDatabase(prev => [...prev, { text, embedding }]);
+    } catch (error) {
+      console.error('Failed to add item:', error);
+    }
+  };
+
+  const removeItem = (index: number) => {
+    setDatabase(prev => prev.filter((_, i) => i !== index));
+  };
+
+  return (
+    <View>
+      {/* Add item UI */}
+      {/* Search UI */}
+    </View>
+  );
+}
+```
+
+### Filtering and Ranking
+
+Combine semantic search with filters:
+
+```tsx
+interface DatabaseItem {
+  text: string;
+  embedding: Float32Array;
+  category: string;
+  date: Date;
+}
+
+function searchWithFilters(
+  query: Float32Array,
+  database: DatabaseItem[],
+  filters: {
+    category?: string;
+    minDate?: Date;
+  }
+): Array<DatabaseItem & { similarity: number }> {
+  // Apply filters
+  let filtered = database;
+  
+  if (filters.category) {
+    filtered = filtered.filter(item => item.category === filters.category);
+  }
+  
+  if (filters.minDate) {
+    filtered = filtered.filter(item => item.date >= filters.minDate);
+  }
+
+  // Calculate similarity
+  const scored = filtered.map(item => ({
+    ...item,
+    similarity: dotProduct(query, item.embedding),
+  }));
+
+  // Sort by similarity
+  scored.sort((a, b) => b.similarity - a.similarity);
+
+  return scored;
+}
+```
+
+### Similarity Threshold
+
+Filter results by minimum similarity:
+
+```tsx
+const MIN_SIMILARITY = 0.3;
+
+const handleSearch = async () => {
+  const queryEmbedding = await model.forward(query);
+  
+  const results = database
+    .map(({ text, embedding }) => ({
+      text,
+      similarity: dotProduct(queryEmbedding, embedding),
+    }))
+    .filter(item => item.similarity >= MIN_SIMILARITY)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 10);
+
+  if (results.length === 0) {
+    console.log('No results above similarity threshold');
+  }
+  
+  setResults(results);
+};
+```
+
+## Real-World Example
+
+### Building a FAQ Search
+
+```tsx
+import { useState, useEffect } from 'react';
+import { useTextEmbeddings, ALL_MINILM_L6_V2 } from 'react-native-executorch';
+
+interface FAQ {
+  question: string;
+  answer: string;
+  embedding?: Float32Array;
+}
+
+function FAQSearch() {
+  const model = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+  const [faqs, setFaqs] = useState<FAQ[]>([
+    {
+      question: 'How do I reset my password?',
+      answer: 'Click on "Forgot Password" on the login page.',
+    },
+    {
+      question: 'What payment methods do you accept?',
+      answer: 'We accept credit cards, PayPal, and bank transfers.',
+    },
+    {
+      question: 'How can I contact support?',
+      answer: 'Email us at support@example.com or call 1-800-SUPPORT.',
+    },
+  ]);
+  const [query, setQuery] = useState('');
+  const [matches, setMatches] = useState<Array<FAQ & { score: number }>>([]);
+
+  // Pre-compute FAQ embeddings
+  useEffect(() => {
+    const embedFAQs = async () => {
+      if (!model.isReady) return;
+
+      const embedded = await Promise.all(
+        faqs.map(async (faq) => ({
+          ...faq,
+          embedding: await model.forward(faq.question),
+        }))
+      );
+
+      setFaqs(embedded);
+    };
+
+    embedFAQs();
+  }, [model.isReady]);
+
+  const searchFAQs = async () => {
+    if (!model.isReady || !query.trim()) return;
+
+    const queryEmbedding = await model.forward(query);
+
+    const scored = faqs
+      .filter(faq => faq.embedding)
+      .map(faq => ({
+        ...faq,
+        score: dotProduct(queryEmbedding, faq.embedding!),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    setMatches(scored);
+  };
+
+  return (
+    <View>
+      <Text>Ask a question:</Text>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="e.g., How do I change my password?"
+      />
+      <Button title="Search" onPress={searchFAQs} />
+
+      {matches.map((faq, index) => (
+        <View key={index}>
+          <Text style={{ fontWeight: 'bold' }}>{faq.question}</Text>
+          <Text>{faq.answer}</Text>
+          <Text style={{ color: 'gray' }}>
+            Relevance: {(faq.score * 100).toFixed(1)}%
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function dotProduct(a: Float32Array, b: Float32Array): number {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    sum += a[i] * b[i];
+  }
+  return sum;
+}
+```
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Content Discovery" icon="compass">
+    Help users discover related articles, products, or content based on their interests
+  </Card>
+  
+  <Card title="Smart Search" icon="brain">
+    Enable natural language search that understands user intent
+  </Card>
+  
+  <Card title="Recommendation Engine" icon="star">
+    Recommend similar items based on user preferences or history
+  </Card>
+  
+  <Card title="Duplicate Detection" icon="copy">
+    Identify duplicate or near-duplicate content in your database
+  </Card>
+</CardGroup>
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Pre-compute database embeddings">
+    Generate embeddings for your database items once during initialization, not during search:
+    
+    ```tsx
+    useEffect(() => {
+      if (model.isReady) {
+        precomputeEmbeddings();
+      }
+    }, [model.isReady]);
+    ```
+  </Accordion>
+
+  <Accordion title="Cache query embeddings">
+    Store recent query embeddings to avoid regenerating for repeated searches:
+    
+    ```tsx
+    const queryCache = new Map<string, Float32Array>();
+    ```
+  </Accordion>
+
+  <Accordion title="Limit result count">
+    Only calculate similarity for the top N results to improve performance:
+    
+    ```tsx
+    const topResults = scored
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 10);
+    ```
+  </Accordion>
+
+  <Accordion title="Use appropriate thresholds">
+    Filter out low-similarity results early:
+    
+    ```tsx
+    .filter(item => item.similarity >= 0.3)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Usage Guide" icon="code" href="./usage">
+    Learn more about the useTextEmbeddings API
+  </Card>
+  <Card title="Overview" icon="book" href="./overview">
+    Understand text embeddings concepts
+  </Card>
+</CardGroup>

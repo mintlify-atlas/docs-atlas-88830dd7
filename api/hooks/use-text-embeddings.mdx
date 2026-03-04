@@ -1,0 +1,523 @@
+---
+title: 'useTextEmbeddings'
+description: 'React hook for generating text feature vectors'
+icon: 'diagram-project'
+---
+
+## Overview
+
+The `useTextEmbeddings` hook manages a text embeddings model instance for generating vector representations of text. These embeddings encode semantic meaning and can be used for similarity search, clustering, and semantic analysis.
+
+## Import
+
+```typescript
+import { useTextEmbeddings } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const textEmbeddings = useTextEmbeddings({ model, preventLoad }: TextEmbeddingsProps): TextEmbeddingsType
+```
+
+## Parameters
+
+<ParamField path="model" type="object" required>
+  Object containing model and tokenizer sources
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source location of the text embeddings model binary file (.pte)
+    </ParamField>
+    
+    <ParamField path="tokenizerSource" type="ResourceSource" required>
+      Source location of the tokenizer JSON file
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading when the hook mounts
+</ParamField>
+
+## Return Value
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the embeddings model is loaded and ready for inference.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently generating embeddings.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Generates embeddings for the provided text.
+  
+  ```typescript
+  forward(input: string): Promise<Float32Array>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="input" type="string" required>
+      Text string to embed
+    </ParamField>
+  </Expandable>
+  
+  Returns promise resolving to Float32Array containing the embedding vector.
+</ResponseField>
+
+## Usage Examples
+
+### Basic Text Embeddings
+
+```typescript
+import { useTextEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+
+function TextEmbeddingsDemo() {
+  const [text, setText] = useState('');
+  const [embedding, setEmbedding] = useState<Float32Array | null>(null);
+  
+  const textEmbeddings = useTextEmbeddings({
+    model: {
+      modelSource: 'https://huggingface.co/.../embeddings.pte',
+      tokenizerSource: 'https://huggingface.co/.../tokenizer.json',
+    },
+  });
+  
+  const generateEmbedding = async () => {
+    if (!textEmbeddings.isReady || !text) return;
+    
+    try {
+      const vector = await textEmbeddings.forward(text);
+      setEmbedding(vector);
+      
+      console.log('Embedding dimensions:', vector.length);
+      console.log('First 5 values:', Array.from(vector.slice(0, 5)));
+    } catch (error) {
+      console.error('Embedding generation failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {textEmbeddings.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        placeholder="Enter text to embed..."
+        multiline
+      />
+      
+      <Button
+        title="Generate Embedding"
+        onPress={generateEmbedding}
+        disabled={!textEmbeddings.isReady}
+      />
+      
+      {embedding && (
+        <View>
+          <Text>Embedding Vector:</Text>
+          <Text>Dimensions: {embedding.length}</Text>
+          <Text>Preview: [{Array.from(embedding.slice(0, 5)).map(v => v.toFixed(4)).join(', ')}...]</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Semantic Similarity Search
+
+```typescript
+import { useTextEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+
+interface Document {
+  id: string;
+  text: string;
+  embedding: Float32Array;
+}
+
+function SemanticSearch() {
+  const [query, setQuery] = useState('');
+  const [documents, setDocuments] = useState<Document[]>([
+    { id: '1', text: 'The cat sat on the mat', embedding: new Float32Array() },
+    { id: '2', text: 'Dogs are great pets', embedding: new Float32Array() },
+    { id: '3', text: 'Python is a programming language', embedding: new Float32Array() },
+  ]);
+  const [results, setResults] = useState<Array<{ doc: Document; similarity: number }>>([]);
+  
+  const textEmbeddings = useTextEmbeddings({
+    model: {
+      modelSource: require('./models/embeddings.pte'),
+      tokenizerSource: require('./models/tokenizer.json'),
+    },
+  });
+  
+  // Cosine similarity
+  const cosineSimilarity = (a: Float32Array, b: Float32Array): number => {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  };
+  
+  const search = async () => {
+    if (!textEmbeddings.isReady || !query) return;
+    
+    try {
+      // Generate query embedding
+      const queryEmbedding = await textEmbeddings.forward(query);
+      
+      // Calculate similarity with all documents
+      const similarities = documents.map((doc) => ({
+        doc,
+        similarity: cosineSimilarity(queryEmbedding, doc.embedding),
+      }));
+      
+      // Sort by similarity
+      const sorted = similarities.sort((a, b) => b.similarity - a.similarity);
+      
+      setResults(sorted);
+    } catch (error) {
+      console.error('Search failed:', error);
+    }
+  };
+  
+  // Index documents on mount
+  useEffect(() => {
+    const indexDocuments = async () => {
+      if (!textEmbeddings.isReady) return;
+      
+      const indexed = await Promise.all(
+        documents.map(async (doc) => {
+          const embedding = await textEmbeddings.forward(doc.text);
+          return { ...doc, embedding };
+        })
+      );
+      
+      setDocuments(indexed);
+    };
+    
+    indexDocuments();
+  }, [textEmbeddings.isReady]);
+  
+  return (
+    <View>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search..."
+      />
+      <Button title="Search" onPress={search} />
+      
+      <Text>Results:</Text>
+      {results.map((result, idx) => (
+        <View key={idx} style={{ padding: 10, borderBottomWidth: 1 }}>
+          <Text>{result.doc.text}</Text>
+          <Text style={{ color: 'gray' }}>
+            Similarity: {(result.similarity * 100).toFixed(1)}%
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+```
+
+### Text Clustering
+
+```typescript
+import { useTextEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+
+function TextClustering() {
+  const [texts, setTexts] = useState<string[]>([
+    'Machine learning is fascinating',
+    'I love playing basketball',
+    'Neural networks are powerful',
+    'Soccer is my favorite sport',
+    'Deep learning requires GPUs',
+  ]);
+  const [clusters, setClusters] = useState<Record<number, string[]>>({});
+  
+  const textEmbeddings = useTextEmbeddings({
+    model: {
+      modelSource: 'https://example.com/embeddings.pte',
+      tokenizerSource: 'https://example.com/tokenizer.json',
+    },
+  });
+  
+  const clusterTexts = async (numClusters: number = 2) => {
+    if (!textEmbeddings.isReady) return;
+    
+    try {
+      // Generate embeddings for all texts
+      const embeddings = await Promise.all(
+        texts.map((text) => textEmbeddings.forward(text))
+      );
+      
+      // Simple k-means clustering (simplified)
+      const assignments = performKMeans(embeddings, numClusters);
+      
+      // Group texts by cluster
+      const grouped: Record<number, string[]> = {};
+      assignments.forEach((cluster, idx) => {
+        if (!grouped[cluster]) grouped[cluster] = [];
+        grouped[cluster].push(texts[idx]);
+      });
+      
+      setClusters(grouped);
+    } catch (error) {
+      console.error('Clustering failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Button title="Cluster Texts" onPress={() => clusterTexts(2)} />
+      
+      {Object.entries(clusters).map(([cluster, items]) => (
+        <View key={cluster} style={{ marginTop: 20 }}>
+          <Text style={{ fontWeight: 'bold' }}>Cluster {cluster}:</Text>
+          {items.map((text, idx) => (
+            <Text key={idx} style={{ marginLeft: 10 }}>• {text}</Text>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function performKMeans(vectors: Float32Array[], k: number): number[] {
+  // Simplified k-means implementation
+  // In production, use a proper clustering library
+  return new Array(vectors.length).fill(0).map(() => Math.floor(Math.random() * k));
+}
+```
+
+### Duplicate Detection
+
+```typescript
+import { useTextEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+
+function DuplicateTextDetector() {
+  const [texts, setTexts] = useState<string[]>([]);
+  const [duplicates, setDuplicates] = useState<Array<[number, number]>>([]);
+  
+  const textEmbeddings = useTextEmbeddings({
+    model: {
+      modelSource: require('./models/embeddings.pte'),
+      tokenizerSource: require('./models/tokenizer.json'),
+    },
+  });
+  
+  const findDuplicates = async (threshold: number = 0.95) => {
+    if (!textEmbeddings.isReady || texts.length < 2) return;
+    
+    try {
+      // Generate embeddings
+      const embeddings = await Promise.all(
+        texts.map((text) => textEmbeddings.forward(text))
+      );
+      
+      const duplicatePairs: Array<[number, number]> = [];
+      
+      // Compare each pair
+      for (let i = 0; i < embeddings.length; i++) {
+        for (let j = i + 1; j < embeddings.length; j++) {
+          const similarity = cosineSimilarity(embeddings[i], embeddings[j]);
+          
+          if (similarity >= threshold) {
+            duplicatePairs.push([i, j]);
+          }
+        }
+      }
+      
+      setDuplicates(duplicatePairs);
+    } catch (error) {
+      console.error('Duplicate detection failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Button title="Find Duplicates" onPress={() => findDuplicates(0.95)} />
+      
+      <Text>Found {duplicates.length} duplicate pairs:</Text>
+      {duplicates.map(([i, j], idx) => (
+        <View key={idx}>
+          <Text>Duplicate {idx + 1}:</Text>
+          <Text>  1: {texts[i]}</Text>
+          <Text>  2: {texts[j]}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+```
+
+### Content Recommendation
+
+```typescript
+import { useTextEmbeddings } from 'react-native-executorch';
+import { useState } from 'react';
+
+interface Article {
+  id: string;
+  title: string;
+  content: string;
+  embedding?: Float32Array;
+}
+
+function ContentRecommender() {
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [currentArticle, setCurrentArticle] = useState<Article | null>(null);
+  const [recommendations, setRecommendations] = useState<Article[]>([]);
+  
+  const textEmbeddings = useTextEmbeddings({
+    model: {
+      modelSource: 'https://example.com/embeddings.pte',
+      tokenizerSource: 'https://example.com/tokenizer.json',
+    },
+  });
+  
+  const getRecommendations = async (article: Article, topK: number = 3) => {
+    if (!textEmbeddings.isReady || !article.embedding) return;
+    
+    try {
+      // Calculate similarity with all other articles
+      const similarities = articles
+        .filter((a) => a.id !== article.id && a.embedding)
+        .map((a) => ({
+          article: a,
+          similarity: cosineSimilarity(article.embedding!, a.embedding!),
+        }));
+      
+      // Sort by similarity and take top K
+      const recommended = similarities
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, topK)
+        .map((r) => r.article);
+      
+      setRecommendations(recommended);
+    } catch (error) {
+      console.error('Recommendation failed:', error);
+    }
+  };
+  
+  // Index articles
+  const indexArticle = async (article: Article) => {
+    if (!textEmbeddings.isReady) return;
+    
+    try {
+      const embedding = await textEmbeddings.forward(
+        `${article.title} ${article.content}`
+      );
+      
+      setArticles([...articles, { ...article, embedding }]);
+    } catch (error) {
+      console.error('Indexing failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      {currentArticle && (
+        <View>
+          <Text style={{ fontSize: 18, fontWeight: 'bold' }}>
+            {currentArticle.title}
+          </Text>
+          <Text>{currentArticle.content}</Text>
+          
+          <Text style={{ marginTop: 20, fontWeight: 'bold' }}>
+            Recommended for you:
+          </Text>
+          {recommendations.map((rec) => (
+            <TouchableOpacity
+              key={rec.id}
+              onPress={() => {
+                setCurrentArticle(rec);
+                getRecommendations(rec);
+              }}
+            >
+              <Text style={{ color: 'blue' }}>{rec.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+## Notes
+
+<Info>
+  The model and tokenizer automatically load when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  Embedding vectors can be large (128-768 dimensions typically). Consider memory usage when processing many texts.
+</Warning>
+
+<Tip>
+  For similarity calculations, cosine similarity is the standard metric. Values close to 1 indicate high semantic similarity.
+</Tip>
+
+## Common Use Cases
+
+1. **Semantic Search**: Find documents by meaning, not just keywords
+2. **Duplicate Detection**: Identify semantically similar texts
+3. **Text Clustering**: Group related documents
+4. **Content Recommendation**: Suggest similar articles
+5. **Question Answering**: Match questions to answers
+
+## Performance Considerations
+
+- **Embedding Dimensions**: Typically 128-768 dimensions
+- **Batch Processing**: Process multiple texts efficiently
+- **Caching**: Store embeddings to avoid recomputation
+- **Indexing**: Use vector databases for large collections
+
+## See Also
+
+- [useImageEmbeddings](/api/hooks/use-image-embeddings) - Image embeddings
+- [useLLM](/api/hooks/use-llm) - Large language models
+- [NLP Guide](/llm/text-embeddings) - Text embeddings guide

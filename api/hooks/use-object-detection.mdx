@@ -1,0 +1,473 @@
+---
+title: 'useObjectDetection'
+description: 'React hook for object detection models'
+icon: 'square-dashed'
+---
+
+## Overview
+
+The `useObjectDetection` hook manages an object detection model instance. It processes images and returns detected objects with bounding boxes, labels, and confidence scores.
+
+## Import
+
+```typescript
+import { useObjectDetection } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const detector = useObjectDetection<C>({
+  model,
+  preventLoad
+}: ObjectDetectionProps<C>): ObjectDetectionType<ObjectDetectionLabels<C['modelName']>>
+```
+
+## Parameters
+
+<ParamField path="model" type="ObjectDetectionModelSources" required>
+  Object containing model configuration
+  
+  <Expandable title="properties">
+    <ParamField path="modelName" type="string" required>
+      Built-in model name. Supported values:
+      - `'ssdlite-320-mobilenet-v3-large'`
+      - `'rf-detr-nano'`
+    </ParamField>
+    
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source location of the model binary file (.pte)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading and downloading when the hook mounts
+</ParamField>
+
+## Return Value
+
+Returns an object with the following properties and methods:
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the object detection model is loaded and ready to process images.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error during detection.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Executes the model's forward pass to detect objects in the provided image.
+  
+  ```typescript
+  forward(
+    input: string | PixelData,
+    detectionThreshold?: number
+  ): Promise<Detection<L>[]>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="input" type="string | PixelData" required>
+      Image source as a file path, URI, base64 string, or PixelData object
+    </ParamField>
+    
+    <ParamField path="detectionThreshold" type="number" default="0.7">
+      Minimum confidence score (0-1) for detections to be included in results
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to an array of Detection objects.
+</ResponseField>
+
+<ResponseField name="runOnFrame" type="function | null">
+  Synchronous worklet function for real-time VisionCamera frame processing.
+  
+  ```typescript
+  runOnFrame(
+    frame: Frame,
+    detectionThreshold: number
+  ): Detection<L>[]
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="frame" type="Frame" required>
+      VisionCamera Frame object
+    </ParamField>
+    
+    <ParamField path="detectionThreshold" type="number" required>
+      Minimum confidence score (0-1) for detections
+    </ParamField>
+  </Expandable>
+  
+  Available only after the model is loaded (`isReady: true`). Use this for real-time processing in VisionCamera worklets.
+</ResponseField>
+
+## Types
+
+### Detection
+
+```typescript
+interface Detection<L extends LabelEnum> {
+  bbox: Bbox;
+  label: keyof L;
+  score: number;
+}
+```
+
+### Bbox
+
+```typescript
+interface Bbox {
+  x1: number; // Bottom-left x coordinate
+  y1: number; // Bottom-left y coordinate
+  x2: number; // Top-right x coordinate
+  y2: number; // Top-right y coordinate
+}
+```
+
+### PixelData
+
+```typescript
+interface PixelData {
+  dataPtr: Uint8Array;           // RGB pixel data
+  sizes: [number, number, 3];    // [height, width, channels]
+  scalarType: ScalarType.BYTE;
+}
+```
+
+## Usage Examples
+
+### Basic Object Detection
+
+```typescript
+import { useObjectDetection } from 'react-native-executorch';
+import { useState } from 'react';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+function ObjectDetector() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [detections, setDetections] = useState<any[]>([]);
+  
+  const detector = useObjectDetection({
+    model: {
+      modelName: 'ssdlite-320-mobilenet-v3-large',
+      modelSource: 'https://huggingface.co/.../ssdlite.pte',
+    },
+  });
+  
+  const pickAndDetect = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    if (!result.assets?.[0]?.uri) return;
+    
+    const uri = result.assets[0].uri;
+    setImageUri(uri);
+    
+    if (!detector.isReady) return;
+    
+    try {
+      const results = await detector.forward(uri, 0.5);
+      setDetections(results);
+      console.log('Detected objects:', results);
+    } catch (error) {
+      console.error('Detection failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {detector.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <Button
+        title="Pick Image & Detect"
+        onPress={pickAndDetect}
+        disabled={!detector.isReady}
+      />
+      
+      {imageUri && (
+        <Image source={{ uri: imageUri }} style={{ width: 400, height: 400 }} />
+      )}
+      
+      {detections.map((det, idx) => (
+        <View key={idx}>
+          <Text>
+            {det.label}: {(det.score * 100).toFixed(1)}% at 
+            ({det.bbox.x1.toFixed(0)}, {det.bbox.y1.toFixed(0)}) to 
+            ({det.bbox.x2.toFixed(0)}, {det.bbox.y2.toFixed(0)})
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+```
+
+### Drawing Bounding Boxes
+
+```typescript
+import { useObjectDetection } from 'react-native-executorch';
+import { useState } from 'react';
+import Svg, { Rect, Text as SvgText } from 'react-native-svg';
+
+function DetectionVisualizer() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+  const [detections, setDetections] = useState<any[]>([]);
+  
+  const detector = useObjectDetection({
+    model: {
+      modelName: 'rf-detr-nano',
+      modelSource: require('./models/rf-detr-nano.pte'),
+    },
+  });
+  
+  const detectObjects = async (uri: string) => {
+    if (!detector.isReady) return;
+    
+    // Get image dimensions
+    Image.getSize(uri, (width, height) => {
+      setImageDimensions({ width, height });
+    });
+    
+    try {
+      const results = await detector.forward(uri, 0.7);
+      setDetections(results);
+    } catch (error) {
+      console.error('Detection failed:', error);
+    }
+  };
+  
+  const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+  
+  return (
+    <View>
+      {imageUri && (
+        <View>
+          <Image
+            source={{ uri: imageUri }}
+            style={{ width: 400, height: 400 }}
+          />
+          
+          <Svg
+            style={{ position: 'absolute', top: 0, left: 0 }}
+            width={400}
+            height={400}
+          >
+            {detections.map((det, idx) => {
+              const scaleX = 400 / imageDimensions.width;
+              const scaleY = 400 / imageDimensions.height;
+              
+              return (
+                <React.Fragment key={idx}>
+                  <Rect
+                    x={det.bbox.x1 * scaleX}
+                    y={det.bbox.y1 * scaleY}
+                    width={(det.bbox.x2 - det.bbox.x1) * scaleX}
+                    height={(det.bbox.y2 - det.bbox.y1) * scaleY}
+                    stroke={colors[idx % colors.length]}
+                    strokeWidth="2"
+                    fill="none"
+                  />
+                  <SvgText
+                    x={det.bbox.x1 * scaleX}
+                    y={det.bbox.y1 * scaleY - 5}
+                    fill={colors[idx % colors.length]}
+                    fontSize="12"
+                    fontWeight="bold"
+                  >
+                    {det.label} {(det.score * 100).toFixed(0)}%
+                  </SvgText>
+                </React.Fragment>
+              );
+            })}
+          </Svg>
+        </View>
+      )}
+    </View>
+  );
+}
+```
+
+### Real-time Detection with VisionCamera
+
+```typescript
+import { useObjectDetection } from 'react-native-executorch';
+import { Camera, useFrameProcessor } from 'react-native-vision-camera';
+import { useSharedValue } from 'react-native-reanimated';
+import { useState } from 'react';
+
+function RealtimeDetector() {
+  const detector = useObjectDetection({
+    model: {
+      modelName: 'ssdlite-320-mobilenet-v3-large',
+      modelSource: 'https://example.com/ssdlite.pte',
+    },
+  });
+  
+  const detections = useSharedValue([]);
+  
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet';
+    
+    if (detector.runOnFrame) {
+      const results = detector.runOnFrame(frame, 0.7);
+      detections.value = results;
+    }
+  }, [detector.runOnFrame]);
+  
+  return (
+    <View style={{ flex: 1 }}>
+      <Camera
+        style={{ flex: 1 }}
+        device={/* camera device */}
+        isActive={detector.isReady}
+        frameProcessor={frameProcessor}
+      />
+      
+      {/* Overlay detection results */}
+      <View style={{ position: 'absolute', top: 20, left: 20 }}>
+        <Text style={{ color: 'white', fontSize: 18 }}>
+          Objects detected: {detections.value.length}
+        </Text>
+      </View>
+    </View>
+  );
+}
+```
+
+### Filtering Detections by Label
+
+```typescript
+import { useObjectDetection } from 'react-native-executorch';
+import { useState } from 'react';
+
+function FilteredDetector() {
+  const [selectedLabels, setSelectedLabels] = useState(['person', 'car', 'dog']);
+  const [detections, setDetections] = useState<any[]>([]);
+  
+  const detector = useObjectDetection({
+    model: {
+      modelName: 'ssdlite-320-mobilenet-v3-large',
+      modelSource: require('./models/ssdlite.pte'),
+    },
+  });
+  
+  const detectAndFilter = async (imageUri: string) => {
+    if (!detector.isReady) return;
+    
+    try {
+      const allDetections = await detector.forward(imageUri, 0.6);
+      
+      // Filter by selected labels
+      const filtered = allDetections.filter((det) =>
+        selectedLabels.includes(det.label as string)
+      );
+      
+      setDetections(filtered);
+    } catch (error) {
+      console.error('Detection failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Detecting only: {selectedLabels.join(', ')}</Text>
+      
+      {detections.map((det, idx) => (
+        <Text key={idx}>
+          {det.label}: {(det.score * 100).toFixed(1)}%
+        </Text>
+      ))}
+    </View>
+  );
+}
+```
+
+### Detection Statistics
+
+```typescript
+import { useObjectDetection } from 'react-native-executorch';
+import { useState } from 'react';
+
+function DetectionStats() {
+  const [stats, setStats] = useState<Record<string, number>>({});
+  
+  const detector = useObjectDetection({
+    model: {
+      modelName: 'rf-detr-nano',
+      modelSource: 'https://example.com/rf-detr.pte',
+    },
+  });
+  
+  const analyzeImage = async (imageUri: string) => {
+    if (!detector.isReady) return;
+    
+    try {
+      const detections = await detector.forward(imageUri, 0.5);
+      
+      // Count objects by label
+      const counts: Record<string, number> = {};
+      detections.forEach((det) => {
+        const label = det.label as string;
+        counts[label] = (counts[label] || 0) + 1;
+      });
+      
+      setStats(counts);
+    } catch (error) {
+      console.error('Analysis failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Object Counts:</Text>
+      {Object.entries(stats).map(([label, count]) => (
+        <Text key={label}>
+          {label}: {count}
+        </Text>
+      ))}
+      
+      <Text>Total objects: {Object.values(stats).reduce((a, b) => a + b, 0)}</Text>
+    </View>
+  );
+}
+```
+
+## Notes
+
+<Info>
+  The model automatically loads when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  For real-time detection with VisionCamera, use `runOnFrame` in worklets. For async processing, use `forward`.
+</Warning>
+
+<Tip>
+  Adjust the `detectionThreshold` parameter to balance between detecting more objects (lower threshold) and reducing false positives (higher threshold).
+</Tip>
+
+## Supported Models
+
+- **ssdlite-320-mobilenet-v3-large**: Efficient single-shot detection model
+- **rf-detr-nano**: Lightweight DETR-based detection model
+
+Both models use COCO labels (80 common object categories).
+
+## See Also
+
+- [useClassification](/api/hooks/use-classification) - Image classification
+- [useSemanticSegmentation](/api/hooks/use-semantic-segmentation) - Pixel-level segmentation
+- [Computer Vision Guide](/computer-vision/object-detection) - Object detection guide

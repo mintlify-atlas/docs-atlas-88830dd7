@@ -1,0 +1,339 @@
+---
+title: 'ObjectDetectionModule'
+description: 'Class-based API for object detection with type-safe label maps'
+icon: 'scanner-gun'
+---
+
+## Overview
+
+`ObjectDetectionModule` provides a class-based interface for object detection tasks with type-safe label maps. It supports both built-in models (like SSDLite and RT-DETR) and custom models with user-defined labels.
+
+## When to Use
+
+**Use `ObjectDetectionModule` when:**
+- You need fine-grained control over model lifecycle
+- You're working outside React components
+- You need to manage multiple detection model instances
+- You want to integrate detection into non-React code
+
+**Use `useObjectDetection` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Type Parameters
+
+```typescript
+ObjectDetectionModule<T extends ObjectDetectionModelName | LabelEnum>
+```
+
+<ParamField path="T" type="ObjectDetectionModelName | LabelEnum">
+  Either a built-in model name (e.g., `'ssdlite-320-mobilenet-v3-large'`) or a custom label enum.
+</ParamField>
+
+## Static Methods
+
+### fromModelName()
+
+```typescript
+static async fromModelName<C extends ObjectDetectionModelSources>(
+  config: C,
+  onDownloadProgress?: (progress: number) => void
+): Promise<ObjectDetectionModule<ModelNameOf<C>>>
+```
+
+Creates an object detection instance for a built-in model.
+
+#### Parameters
+
+<ParamField path="config" type="ObjectDetectionModelSources" required>
+  Configuration specifying which model to load and where to fetch it from. Must include `modelName` and `modelSource`.
+</ParamField>
+
+<ParamField path="onDownloadProgress" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Returns
+
+A Promise resolving to an `ObjectDetectionModule` instance typed to the chosen model's label map.
+
+#### Example
+
+```typescript
+import { ObjectDetectionModule } from 'react-native-executorch';
+
+const detector = await ObjectDetectionModule.fromModelName(
+  {
+    modelName: 'ssdlite-320-mobilenet-v3-large',
+    modelSource: 'https://example.com/ssdlite.pte'
+  },
+  (progress) => {
+    console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+  }
+);
+```
+
+### fromCustomConfig()
+
+```typescript
+static async fromCustomConfig<L extends LabelEnum>(
+  modelSource: ResourceSource,
+  config: ObjectDetectionConfig<L>,
+  onDownloadProgress?: (progress: number) => void
+): Promise<ObjectDetectionModule<L>>
+```
+
+Creates an object detection instance with a user-provided label map and custom configuration.
+
+#### Parameters
+
+<ParamField path="modelSource" type="ResourceSource" required>
+  A fetchable resource pointing to the model binary.
+</ParamField>
+
+<ParamField path="config" type="ObjectDetectionConfig<L>" required>
+  Configuration object with the label map and optional preprocessing parameters:
+  - `labelMap`: Enum mapping class names to indices
+  - `preprocessorConfig`: Optional normalization parameters (`normMean`, `normStd`)
+</ParamField>
+
+<ParamField path="onDownloadProgress" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Returns
+
+A Promise resolving to an `ObjectDetectionModule` instance typed to the provided label map.
+
+#### Example
+
+```typescript
+const MyLabels = {
+  PERSON: 0,
+  CAR: 1,
+  BICYCLE: 2,
+} as const;
+
+const detector = await ObjectDetectionModule.fromCustomConfig(
+  'https://example.com/custom_detector.pte',
+  {
+    labelMap: MyLabels,
+    preprocessorConfig: {
+      normMean: [0.485, 0.456, 0.406],
+      normStd: [0.229, 0.224, 0.225]
+    }
+  }
+);
+```
+
+## Instance Methods
+
+### forward()
+
+```typescript
+async forward(
+  input: string | PixelData,
+  detectionThreshold?: number
+): Promise<Detection<ResolveLabels<T>>[]>
+```
+
+Executes the model's forward pass to detect objects within the provided image.
+
+#### Parameters
+
+<ParamField path="input" type="string | PixelData" required>
+  Image input as either:
+  - A string (file path, URI, or Base64)
+  - A `PixelData` object with pixel buffer and dimensions
+</ParamField>
+
+<ParamField path="detectionThreshold" type="number" default="0.7">
+  Minimum confidence score for a detection to be included. Range: 0-1.
+</ParamField>
+
+#### Returns
+
+An array of `Detection` objects with type-safe labels.
+
+#### Example
+
+```typescript
+const detections = await detector.forward(
+  'file:///path/to/image.jpg',
+  0.5  // 50% confidence threshold
+);
+
+detections.forEach(detection => {
+  console.log(`Found ${detection.label} at (${detection.box.x}, ${detection.box.y})`);
+  console.log(`  Size: ${detection.box.width}x${detection.box.height}`);
+  console.log(`  Confidence: ${(detection.score * 100).toFixed(1)}%`);
+});
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory and releases native resources. Always call this when done to prevent memory leaks.
+
+#### Example
+
+```typescript
+detector.delete();
+```
+
+### generateFromFrame()
+
+```typescript
+generateFromFrame(
+  frameData: Frame,
+  detectionThreshold?: number
+): Detection<ResolveLabels<T>>[]
+```
+
+Process a camera frame directly for real-time object detection. This method is worklet-compatible and can be called from VisionCamera's frame processor thread.
+
+#### Parameters
+
+<ParamField path="frameData" type="Frame" required>
+  Frame data object with either `nativeBuffer` (zero-copy) or `data` (ArrayBuffer).
+</ParamField>
+
+<ParamField path="detectionThreshold" type="number" default="0.7">
+  Minimum confidence score for detections.
+</ParamField>
+
+#### Returns
+
+Array of `Detection` objects.
+
+#### Example
+
+```typescript
+import { useFrameOutput } from 'react-native-vision-camera';
+
+const frameOutput = useFrameOutput({
+  pixelFormat: 'rgb',
+  onFrame(frame) {
+    'worklet';
+    const nativeBuffer = frame.getNativeBuffer();
+    const detections = detector.generateFromFrame(
+      {
+        nativeBuffer: nativeBuffer.pointer,
+        width: frame.width,
+        height: frame.height
+      },
+      0.6
+    );
+    nativeBuffer.release();
+    frame.dispose();
+    
+    console.log(`Detected ${detections.length} objects`);
+  }
+});
+```
+
+## Built-in Models
+
+Supported built-in model names:
+
+- `'ssdlite-320-mobilenet-v3-large'` - SSDLite with MobileNetV3 backbone (COCO labels)
+- `'rf-detr-nano'` - RT-DETR Nano (COCO labels)
+
+All built-in models use COCO dataset labels (80 classes including person, car, dog, etc.).
+
+## Complete Example
+
+```typescript
+import { ObjectDetectionModule } from 'react-native-executorch';
+
+class ObjectDetector {
+  private detector: ObjectDetectionModule<'ssdlite-320-mobilenet-v3-large'> | null = null;
+
+  async initialize() {
+    this.detector = await ObjectDetectionModule.fromModelName(
+      {
+        modelName: 'ssdlite-320-mobilenet-v3-large',
+        modelSource: 'https://example.com/ssdlite.pte'
+      },
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+  }
+
+  async detect(imagePath: string, threshold = 0.5) {
+    if (!this.detector) {
+      throw new Error('Detector not initialized');
+    }
+
+    const detections = await this.detector.forward(imagePath, threshold);
+    
+    return detections.map(d => ({
+      class: d.label,
+      confidence: (d.score * 100).toFixed(1) + '%',
+      boundingBox: d.box
+    }));
+  }
+
+  cleanup() {
+    this.detector?.delete();
+    this.detector = null;
+  }
+}
+
+// Usage
+const detector = new ObjectDetector();
+await detector.initialize();
+
+const results = await detector.detect('/path/to/image.jpg', 0.7);
+console.log('Detections:', results);
+// [
+//   { class: 'person', confidence: '95.2%', boundingBox: { x: 100, y: 50, width: 200, height: 400 } },
+//   { class: 'dog', confidence: '88.7%', boundingBox: { x: 350, y: 200, width: 150, height: 180 } }
+// ]
+
+detector.cleanup();
+```
+
+## Type Safety
+
+The module provides compile-time type safety for labels:
+
+```typescript
+// Built-in model - labels are typed as CocoLabel
+const detector = await ObjectDetectionModule.fromModelName({
+  modelName: 'ssdlite-320-mobilenet-v3-large',
+  modelSource: '...'
+});
+
+const detections = await detector.forward('image.jpg');
+detections.forEach(d => {
+  // d.label is typed as CocoLabel
+  console.log(d.label); // 'person', 'car', 'dog', etc.
+});
+
+// Custom model - labels are typed from your enum
+const MyLabels = { FACE: 0, HAND: 1 } as const;
+const customDetector = await ObjectDetectionModule.fromCustomConfig(
+  'custom.pte',
+  { labelMap: MyLabels }
+);
+
+const customDetections = await customDetector.forward('image.jpg');
+customDetections.forEach(d => {
+  // d.label is typed as 'FACE' | 'HAND'
+  console.log(d.label);
+});
+```
+
+## See Also
+
+- [useObjectDetection Hook](/api/hooks/use-object-detection) - React hook alternative
+- [Detection Type](/api/types/detection)
+- [CocoLabel Enum](/api/types/coco-label)
+- [Frame Type](/api/types/frame)

@@ -1,0 +1,431 @@
+---
+title: 'TextToImageModule'
+description: 'Class-based API for text-to-image generation tasks'
+icon: 'image-polaroid'
+---
+
+## Overview
+
+`TextToImageModule` provides a class-based interface for generating images from text prompts using diffusion models. It supports models like Stable Diffusion and similar architectures.
+
+## When to Use
+
+**Use `TextToImageModule` when:**
+- You need manual control over generation lifecycle
+- You're working outside React components
+- You need to manage multiple generation sessions
+- You want to integrate image generation into non-React code
+
+**Use `useTextToImage` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Extends
+
+`TextToImageModule` extends [BaseModule](/api/modules/base-module).
+
+## Constructor
+
+```typescript
+new TextToImageModule(inferenceCallback?: (stepIdx: number) => void)
+```
+
+Creates a new text-to-image module instance with optional step callback.
+
+### Parameters
+
+<ParamField path="inferenceCallback" type="(stepIdx: number) => void" optional>
+  Optional callback function that receives the current step index during inference. Useful for progress tracking.
+</ParamField>
+
+### Example
+
+```typescript
+import { TextToImageModule } from 'react-native-executorch';
+
+const textToImage = new TextToImageModule((stepIdx) => {
+  console.log(`Generation step: ${stepIdx}`);
+});
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  model: {
+    tokenizerSource: ResourceSource;
+    schedulerSource: ResourceSource;
+    encoderSource: ResourceSource;
+    unetSource: ResourceSource;
+    decoderSource: ResourceSource;
+  },
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the text-to-image model components (tokenizer, scheduler, encoder, UNet, and decoder).
+
+#### Parameters
+
+<ParamField path="model.tokenizerSource" type="ResourceSource" required>
+  Resource location of the tokenizer.
+</ParamField>
+
+<ParamField path="model.schedulerSource" type="ResourceSource" required>
+  Resource location of the scheduler configuration JSON.
+</ParamField>
+
+<ParamField path="model.encoderSource" type="ResourceSource" required>
+  Resource location of the text encoder model.
+</ParamField>
+
+<ParamField path="model.unetSource" type="ResourceSource" required>
+  Resource location of the UNet model.
+</ParamField>
+
+<ParamField path="model.decoderSource" type="ResourceSource" required>
+  Resource location of the VAE decoder model.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await textToImage.load(
+  {
+    tokenizerSource: 'https://example.com/tokenizer.bin',
+    schedulerSource: 'https://example.com/scheduler.json',
+    encoderSource: 'https://example.com/text_encoder.pte',
+    unetSource: 'https://example.com/unet.pte',
+    decoderSource: 'https://example.com/vae_decoder.pte'
+  },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### forward()
+
+```typescript
+async forward(
+  input: string,
+  imageSize?: number,
+  numSteps?: number,
+  seed?: number
+): Promise<string>
+```
+
+Runs the model to generate an image described by the input prompt.
+
+#### Parameters
+
+<ParamField path="input" type="string" required>
+  The text prompt to generate the image from.
+</ParamField>
+
+<ParamField path="imageSize" type="number" default="512">
+  The desired width and height of the output image in pixels. Common values: 256, 512, 768.
+</ParamField>
+
+<ParamField path="numSteps" type="number" default="5">
+  The number of inference steps to perform. More steps generally produce better quality but take longer.
+</ParamField>
+
+<ParamField path="seed" type="number" optional>
+  An optional seed for random number generation to ensure reproducibility. Omit or use -1 for random seed.
+</ParamField>
+
+#### Returns
+
+A Base64-encoded string representing the generated PNG image.
+
+#### Example
+
+```typescript
+const imageBase64 = await textToImage.forward(
+  'A beautiful sunset over mountains',
+  512,  // 512x512 pixels
+  20,   // 20 inference steps
+  42    // Seed for reproducibility
+);
+
+// Use in an Image component
+<Image source={{ uri: `data:image/png;base64,${imageBase64}` }} />
+
+// Or save to file
+import RNFS from 'react-native-fs';
+const outputPath = RNFS.DocumentDirectoryPath + '/generated_image.png';
+await RNFS.writeFile(outputPath, imageBase64, 'base64');
+```
+
+### interrupt()
+
+```typescript
+interrupt(): void
+```
+
+Interrupts model generation. The model is stopped at the nearest step.
+
+#### Example
+
+```typescript
+textToImage.interrupt();
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory and releases native resources.
+
+#### Example
+
+```typescript
+textToImage.delete();
+```
+
+## Complete Example
+
+```typescript
+import { TextToImageModule } from 'react-native-executorch';
+import RNFS from 'react-native-fs';
+
+class ImageGenerator {
+  private model: TextToImageModule;
+  private currentStep = 0;
+  private totalSteps = 0;
+
+  constructor() {
+    this.model = new TextToImageModule((stepIdx) => {
+      this.currentStep = stepIdx;
+      console.log(`Progress: ${stepIdx}/${this.totalSteps}`);
+    });
+  }
+
+  async initialize() {
+    console.log('Loading text-to-image model...');
+    await this.model.load(
+      {
+        tokenizerSource: 'https://example.com/tokenizer.bin',
+        schedulerSource: 'https://example.com/scheduler.json',
+        encoderSource: 'https://example.com/encoder.pte',
+        unetSource: 'https://example.com/unet.pte',
+        decoderSource: 'https://example.com/decoder.pte'
+      },
+      (progress) => {
+        console.log(`Download: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('Model ready!');
+  }
+
+  async generate(
+    prompt: string,
+    options: {
+      size?: number;
+      steps?: number;
+      seed?: number;
+    } = {}
+  ) {
+    const { size = 512, steps = 20, seed } = options;
+    this.totalSteps = steps;
+    this.currentStep = 0;
+
+    console.log(`Generating image for: "${prompt}"`);
+    console.log(`Size: ${size}x${size}, Steps: ${steps}`);
+
+    const imageBase64 = await this.model.forward(prompt, size, steps, seed);
+    
+    return imageBase64;
+  }
+
+  async generateAndSave(
+    prompt: string,
+    outputPath: string,
+    options?: { size?: number; steps?: number; seed?: number }
+  ) {
+    const imageBase64 = await this.generate(prompt, options);
+    await RNFS.writeFile(outputPath, imageBase64, 'base64');
+    console.log(`Image saved to ${outputPath}`);
+    return outputPath;
+  }
+
+  cancel() {
+    this.model.interrupt();
+  }
+
+  cleanup() {
+    this.model.delete();
+  }
+}
+
+// Usage
+const generator = new ImageGenerator();
+await generator.initialize();
+
+const outputPath = RNFS.DocumentDirectoryPath + '/sunset.png';
+await generator.generateAndSave(
+  'A beautiful sunset over mountains, photorealistic, 4k',
+  outputPath,
+  { size: 512, steps: 25, seed: 42 }
+);
+
+generator.cleanup();
+```
+
+## Batch Generation Example
+
+```typescript
+class BatchImageGenerator {
+  private model: TextToImageModule;
+
+  constructor() {
+    this.model = new TextToImageModule();
+  }
+
+  async initialize() {
+    await this.model.load({
+      tokenizerSource: 'https://example.com/tokenizer.bin',
+      schedulerSource: 'https://example.com/scheduler.json',
+      encoderSource: 'https://example.com/encoder.pte',
+      unetSource: 'https://example.com/unet.pte',
+      decoderSource: 'https://example.com/decoder.pte'
+    });
+  }
+
+  async generateMultiple(prompts: string[], outputDir: string) {
+    const results = [];
+
+    for (let i = 0; i < prompts.length; i++) {
+      const prompt = prompts[i];
+      console.log(`\nGenerating ${i + 1}/${prompts.length}: "${prompt}"`);
+      
+      const imageBase64 = await this.model.forward(prompt, 512, 20);
+      const outputPath = `${outputDir}/image_${i + 1}.png`;
+      
+      await RNFS.writeFile(outputPath, imageBase64, 'base64');
+      
+      results.push({
+        prompt,
+        path: outputPath
+      });
+    }
+
+    return results;
+  }
+
+  cleanup() {
+    this.model.delete();
+  }
+}
+
+// Usage
+const batchGenerator = new BatchImageGenerator();
+await batchGenerator.initialize();
+
+const prompts = [
+  'A serene lake at dawn',
+  'A futuristic city skyline',
+  'A cozy cabin in the woods'
+];
+
+const outputDir = RNFS.DocumentDirectoryPath;
+const results = await batchGenerator.generateMultiple(prompts, outputDir);
+
+results.forEach((result, i) => {
+  console.log(`${i + 1}. "${result.prompt}" -> ${result.path}`);
+});
+
+batchGenerator.cleanup();
+```
+
+## Prompt Engineering Tips
+
+```typescript
+class PromptEnhancer {
+  private model: TextToImageModule;
+
+  constructor() {
+    this.model = new TextToImageModule();
+  }
+
+  async initialize() {
+    await this.model.load(/* ... */);
+  }
+
+  enhancePrompt(basePrompt: string, style: string = 'photorealistic'): string {
+    const styleModifiers = {
+      photorealistic: 'photorealistic, 4k, detailed, high quality',
+      artistic: 'artistic, painterly, expressive, vibrant colors',
+      anime: 'anime style, manga, cel shaded, vibrant',
+      cinematic: 'cinematic lighting, dramatic, film grain, bokeh'
+    };
+
+    return `${basePrompt}, ${styleModifiers[style] || styleModifiers.photorealistic}`;
+  }
+
+  async generateStyled(prompt: string, style: string) {
+    const enhancedPrompt = this.enhancePrompt(prompt, style);
+    console.log('Enhanced prompt:', enhancedPrompt);
+    return await this.model.forward(enhancedPrompt, 512, 25);
+  }
+
+  cleanup() {
+    this.model.delete();
+  }
+}
+
+// Usage
+const enhancer = new PromptEnhancer();
+await enhancer.initialize();
+
+const artistic = await enhancer.generateStyled(
+  'A mountain landscape',
+  'artistic'
+);
+
+const photorealistic = await enhancer.generateStyled(
+  'A mountain landscape',
+  'photorealistic'
+);
+```
+
+## Configuration Guidelines
+
+**Image Size:**
+- Smaller (256-384): Faster generation, lower quality
+- Medium (512): Good balance of speed and quality
+- Larger (768+): Better quality, slower, more memory
+
+**Inference Steps:**
+- Few steps (5-10): Fast, lower quality
+- Medium steps (15-25): Good quality, reasonable speed
+- Many steps (30+): Best quality, slower
+
+**Seeds:**
+- Use the same seed for reproducible results
+- Omit seed or use -1 for random variations
+
+## Performance Considerations
+
+- Generation is computationally intensive (can take 10s-60s)
+- Larger images and more steps increase generation time significantly
+- Monitor memory usage for large batch generations
+- Use `interrupt()` to cancel long-running generations
+- Always call `delete()` when done to free resources
+
+## See Also
+
+- [BaseModule](/api/modules/base-module) - Base class with shared functionality
+- [useTextToImage Hook](/api/hooks/use-text-to-image) - React hook alternative
+- [ResourceSource Type](/api/types/resource-source)

@@ -1,0 +1,565 @@
+---
+title: Debugging
+description: Debug AI models and troubleshoot issues in React Native ExecuTorch
+---
+
+Debugging AI model integration can be challenging. This guide covers error handling patterns, common issues, and debugging strategies for React Native ExecuTorch.
+
+## Error Handling Patterns
+
+### Understanding Error Codes
+
+React Native ExecuTorch uses typed error codes for different failure scenarios. All errors inherit from `RnExecutorchError`.
+
+```typescript
+import { 
+  RnExecutorchError,
+  RnExecutorchErrorCode,
+} from 'react-native-executorch';
+
+try {
+  await llm.generate(messages);
+} catch (error) {
+  if (error instanceof RnExecutorchError) {
+    console.log('Error code:', error.code);
+    console.log('Error message:', error.message);
+    
+    switch (error.code) {
+      case RnExecutorchErrorCode.ModuleNotLoaded:
+        // Model not ready yet
+        break;
+      case RnExecutorchErrorCode.MemoryAllocationFailed:
+        // Out of memory
+        break;
+      case RnExecutorchErrorCode.ResourceFetcherDownloadFailed:
+        // Download failed
+        break;
+      default:
+        console.error('Unknown error:', error);
+    }
+  }
+}
+```
+
+### Common Error Codes
+
+From `/packages/react-native-executorch/src/errors/ErrorCodes.ts:4`:
+
+| Code | Name | Description |
+|------|------|-------------|
+| 101 | UnknownError | Unexpected error |
+| 102 | ModuleNotLoaded | Model not downloaded/loaded |
+| 103 | FileWriteFailed | Failed to save file |
+| 104 | ModelGenerating | Model already processing |
+| 105 | LanguageNotSupported | Unsupported language |
+| 112 | InvalidConfig | Invalid configuration |
+| 113 | ThreadPoolError | Threading issue |
+| 114 | FileReadFailed | Failed to read file |
+| 115 | InvalidModelOutput | Unexpected output |
+| 116 | WrongDimensions | Input dimension mismatch |
+| 117 | InvalidUserInput | Invalid input data |
+| 118 | DownloadInterrupted | Download interrupted |
+| 167 | TokenizerError | Tokenization failed |
+| 180 | ResourceFetcherDownloadFailed | Download failed |
+| 186 | ResourceFetcherAdapterNotInitialized | Fetcher not initialized |
+
+### ExecuTorch Runtime Errors
+
+Errors from the ExecuTorch runtime:
+
+| Code | Name | Description |
+|------|------|-------------|
+| 0 | Ok | Success |
+| 1 | Internal | Internal error |
+| 2 | InvalidState | Invalid executor state |
+| 16 | NotSupported | Operation not supported |
+| 20 | OperatorMissing | Missing operator |
+| 33 | MemoryAllocationFailed | OOM |
+| 35 | InvalidProgram | Invalid .pte file |
+| 48-50 | Delegate* | Backend delegation errors |
+
+## Debugging with Hooks
+
+### Monitor Hook State
+
+```typescript
+import { useEffect } from 'react';
+import { useLLM, LLAMA3_2_1B } from 'react-native-executorch';
+
+function ChatComponent() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+
+  // Monitor loading state
+  useEffect(() => {
+    console.log('isReady:', llm.isReady);
+  }, [llm.isReady]);
+
+  // Monitor generation state
+  useEffect(() => {
+    console.log('isGenerating:', llm.isGenerating);
+  }, [llm.isGenerating]);
+
+  // Monitor download progress
+  useEffect(() => {
+    console.log('Download progress:', llm.downloadProgress);
+  }, [llm.downloadProgress]);
+
+  // Monitor errors
+  useEffect(() => {
+    if (llm.error) {
+      console.error('LLM Error:', llm.error);
+      console.error('Error code:', llm.error.code);
+    }
+  }, [llm.error]);
+
+  // Monitor response
+  useEffect(() => {
+    console.log('Response:', llm.response);
+  }, [llm.response]);
+
+  // Monitor tokens (streaming)
+  useEffect(() => {
+    if (llm.token) {
+      console.log('New token:', llm.token);
+    }
+  }, [llm.token]);
+
+  return /* Your UI */;
+}
+```
+
+### Track Token Generation
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+const handleGenerate = async () => {
+  const startTime = Date.now();
+  
+  try {
+    await llm.generate(messages);
+    
+    const endTime = Date.now();
+    const duration = (endTime - startTime) / 1000;
+    
+    console.log('Generation completed in', duration, 'seconds');
+    console.log('Prompt tokens:', llm.getPromptTokenCount());
+    console.log('Generated tokens:', llm.getGeneratedTokenCount());
+    console.log('Total tokens:', llm.getTotalTokenCount());
+    console.log('Tokens/sec:', llm.getGeneratedTokenCount() / duration);
+  } catch (error) {
+    console.error('Generation failed:', error);
+  }
+};
+```
+
+## Debugging with TypeScript API
+
+### Custom Callbacks
+
+```typescript
+import { LLMModule, Message } from 'react-native-executorch';
+
+const llm = new LLMModule({
+  tokenCallback: (token: string) => {
+    console.log('Token:', token);
+  },
+  messageHistoryCallback: (history: Message[]) => {
+    console.log('Message history updated:', history.length, 'messages');
+  },
+});
+
+await llm.load({
+  modelSource: LLAMA3_2_1B,
+  tokenizerSource: /* ... */,
+  tokenizerConfigSource: /* ... */,
+  onDownloadProgressCallback: (progress: number) => {
+    console.log(`Download: ${(progress * 100).toFixed(2)}%`);
+  },
+});
+```
+
+## Common Issues and Solutions
+
+### 1. Model Not Loading
+
+**Symptom**: `ModuleNotLoaded` error or `isReady` stays `false`
+
+**Causes**:
+- Download failed
+- Invalid model URL
+- Resource fetcher not initialized
+- Insufficient storage space
+
+**Debug**:
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+useEffect(() => {
+  console.log('Download progress:', llm.downloadProgress);
+  console.log('Is ready:', llm.isReady);
+  console.log('Error:', llm.error);
+}, [llm.downloadProgress, llm.isReady, llm.error]);
+```
+
+**Solution**:
+
+```typescript
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// Make sure to initialize before using hooks
+initExecutorch({
+  resourceFetcher: ExpoResourceFetcher,
+});
+```
+
+### 2. Out of Memory Errors
+
+**Symptom**: `MemoryAllocationFailed` error, app crashes
+
+**Debug**:
+
+```typescript
+try {
+  await llm.load();
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.MemoryAllocationFailed) {
+    console.error('Not enough memory for model');
+    // Try smaller model
+  }
+}
+```
+
+**Solution**:
+
+```typescript
+// Use quantized models
+import { LLAMA3_2_1B_SPINQUANT } from 'react-native-executorch';
+
+const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT }); // Uses less memory
+```
+
+See [Memory Management](/advanced/memory-management) for more details.
+
+### 3. Generation Hangs or Fails
+
+**Symptom**: `generate()` never completes, `isGenerating` stuck at `true`
+
+**Debug**:
+
+```typescript
+const timeout = setTimeout(() => {
+  if (llm.isGenerating) {
+    console.warn('Generation taking too long, interrupting...');
+    llm.interrupt();
+  }
+}, 30000); // 30 second timeout
+
+try {
+  await llm.generate(messages);
+  clearTimeout(timeout);
+} catch (error) {
+  clearTimeout(timeout);
+  console.error('Generation error:', error);
+}
+```
+
+### 4. Invalid Input Errors
+
+**Symptom**: `InvalidUserInput` or `WrongDimensions`
+
+**Debug**:
+
+```typescript
+try {
+  const result = await classifier.classify({ image: imageUri });
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.FileReadFailed) {
+    console.error('Invalid image:', imageUri);
+    // Check if file exists and is valid
+  }
+}
+```
+
+**Solution**:
+
+```typescript
+// Validate inputs before processing
+if (!imageUri || !imageUri.startsWith('file://')) {
+  console.error('Invalid image URI:', imageUri);
+  return;
+}
+
+const result = await classifier.classify({ image: imageUri });
+```
+
+### 5. Tokenizer Errors
+
+**Symptom**: `TokenizerError` during LLM operations
+
+**Debug**:
+
+```typescript
+import { LLAMA3_2_1B } from 'react-native-executorch';
+
+const llm = useLLM({
+  model: {
+    modelSource: LLAMA3_2_1B.modelSource,
+    tokenizerSource: LLAMA3_2_1B.tokenizerSource,
+    tokenizerConfigSource: LLAMA3_2_1B.tokenizerConfigSource,
+  },
+});
+
+useEffect(() => {
+  if (llm.error?.code === RnExecutorchErrorCode.TokenizerError) {
+    console.error('Tokenizer failed to load');
+    console.error('Tokenizer source:', LLAMA3_2_1B.tokenizerSource);
+  }
+}, [llm.error]);
+```
+
+### 6. Download Failures
+
+**Symptom**: `ResourceFetcherDownloadFailed`
+
+**Debug**:
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+try {
+  const paths = await ExpoResourceFetcher.fetch(
+    (progress) => console.log(`Progress: ${progress * 100}%`),
+    'https://your-model.pte'
+  );
+  console.log('Downloaded to:', paths);
+} catch (error) {
+  console.error('Download failed:', error);
+  // Check network connection
+  // Verify URL is accessible
+}
+```
+
+**Solution**:
+
+```typescript
+// Implement retry logic
+const downloadWithRetry = async (url: string, maxRetries = 3) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await ExpoResourceFetcher.fetch(() => {}, url);
+    } catch (error) {
+      console.log(`Attempt ${i + 1} failed, retrying...`);
+      if (i === maxRetries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+    }
+  }
+};
+```
+
+## Debugging Model Outputs
+
+### Inspect LLM Responses
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+const messages = [
+  { role: 'system', content: 'You are a helpful assistant' },
+  { role: 'user', content: 'Hello!' },
+];
+
+try {
+  await llm.generate(messages);
+  
+  console.log('Full response:', llm.response);
+  console.log('Message history:', llm.messageHistory);
+  
+  // Check for unexpected outputs
+  if (llm.response.length === 0) {
+    console.warn('Empty response generated');
+  }
+  
+  if (llm.response.includes('�')) {
+    console.warn('Response contains invalid characters');
+  }
+} catch (error) {
+  console.error('Generation error:', error);
+}
+```
+
+### Debug Computer Vision Outputs
+
+```typescript
+import { useClassification, EFFICIENTNET_V2_S } from 'react-native-executorch';
+
+const classifier = useClassification({ model: EFFICIENTNET_V2_S });
+
+const result = await classifier.classify({ image: imageUri });
+
+console.log('Classifications:', result);
+result.forEach((item, index) => {
+  console.log(`${index + 1}. ${item.label}: ${(item.confidence * 100).toFixed(2)}%`);
+});
+
+// Validate results
+if (result.length === 0) {
+  console.warn('No classifications returned');
+}
+
+if (result[0].confidence < 0.1) {
+  console.warn('Low confidence in top prediction');
+}
+```
+
+## Platform-Specific Debugging
+
+### iOS Debug Logs
+
+```typescript
+import { Platform } from 'react-native';
+
+if (Platform.OS === 'ios') {
+  console.log('iOS version:', Platform.Version);
+  // Check iOS-specific issues
+}
+```
+
+View native logs in Xcode:
+1. Open `.xcworkspace` in Xcode
+2. Run app
+3. View logs in Console pane
+
+### Android Debug Logs
+
+```typescript
+if (Platform.OS === 'android') {
+  console.log('Android API level:', Platform.Version);
+  // Check Android-specific issues
+}
+```
+
+View native logs:
+```bash
+adb logcat | grep -i executorch
+```
+
+## Performance Debugging
+
+### Profile Generation Speed
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+const profileGeneration = async (messages: Message[]) => {
+  const metrics = {
+    startTime: Date.now(),
+    endTime: 0,
+    duration: 0,
+    promptTokens: 0,
+    generatedTokens: 0,
+    totalTokens: 0,
+    tokensPerSecond: 0,
+  };
+
+  try {
+    await llm.generate(messages);
+    
+    metrics.endTime = Date.now();
+    metrics.duration = (metrics.endTime - metrics.startTime) / 1000;
+    metrics.promptTokens = llm.getPromptTokenCount();
+    metrics.generatedTokens = llm.getGeneratedTokenCount();
+    metrics.totalTokens = llm.getTotalTokenCount();
+    metrics.tokensPerSecond = metrics.generatedTokens / metrics.duration;
+    
+    console.table(metrics);
+  } catch (error) {
+    console.error('Profiling failed:', error);
+  }
+};
+```
+
+### Monitor Resource Usage
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+const checkStorage = async () => {
+  const files = await ExpoResourceFetcher.listDownloadedFiles();
+  const models = await ExpoResourceFetcher.listDownloadedModels();
+  
+  console.log('Total files:', files.length);
+  console.log('Model files:', models.length);
+  
+  for (const model of models) {
+    console.log('Model:', model);
+  }
+};
+```
+
+## Testing Strategies
+
+### Unit Testing Model Integration
+
+```typescript
+import { LLMModule } from 'react-native-executorch';
+
+describe('LLM Integration', () => {
+  let llm: LLMModule;
+
+  beforeAll(async () => {
+    llm = new LLMModule();
+    await llm.load({
+      modelSource: LLAMA3_2_1B,
+      tokenizerSource: /* ... */,
+      tokenizerConfigSource: /* ... */,
+    });
+  });
+
+  afterAll(() => {
+    llm.delete();
+  });
+
+  test('generates response', async () => {
+    const messages = [
+      { role: 'user', content: 'Say hello' },
+    ];
+    
+    const response = await llm.generate(messages);
+    expect(response).toBeTruthy();
+    expect(response.length).toBeGreaterThan(0);
+  });
+});
+```
+
+## Best Practices
+
+1. **Always Check `isReady`**: Before using models
+2. **Monitor `error` State**: React to errors in real-time
+3. **Implement Timeouts**: Prevent hanging operations
+4. **Log Comprehensively**: Track state changes and errors
+5. **Test on Real Devices**: Emulators may hide issues
+6. **Handle All Error Codes**: Provide specific error messages
+7. **Profile Performance**: Monitor token generation speed
+8. **Validate Inputs**: Check data before passing to models
+
+## Debugging Checklist
+
+When encountering issues:
+
+- [ ] Is resource fetcher initialized?
+- [ ] Is model downloaded? Check `downloadProgress`
+- [ ] Is model loaded? Check `isReady`
+- [ ] Are there any errors? Check `error` state
+- [ ] Are inputs valid? Validate before processing
+- [ ] Is device memory sufficient? See [Memory Management](/advanced/memory-management)
+- [ ] Are you handling the correct error codes?
+- [ ] Have you tested on a physical device?
+
+## Next Steps
+
+- Review [Troubleshooting Guide](/guides/troubleshooting) for specific issues
+- Learn about [Memory Management](/advanced/memory-management)
+- Check [Performance Optimization](/advanced/performance-optimization)

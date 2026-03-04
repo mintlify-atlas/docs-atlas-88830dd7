@@ -1,0 +1,491 @@
+---
+title: 'ExecutorchModule'
+description: 'General class-based API for executing custom ExecuTorch models'
+icon: 'microchip'
+---
+
+## Overview
+
+`ExecutorchModule` provides a general class-based interface for executing custom ExecuTorch models. It's the most flexible module, allowing you to run any ExecuTorch-exported model with custom input and output tensors.
+
+## When to Use
+
+**Use `ExecutorchModule` when:**
+- You have a custom model not covered by specialized modules
+- You need low-level tensor operations
+- You're working with experimental or research models
+- You need direct control over model I/O
+
+**Use specialized modules when:**
+- Your use case matches a specialized module (LLM, Classification, etc.)
+- You want higher-level abstractions
+- You prefer type-safe APIs with built-in preprocessing
+
+## Extends
+
+`ExecutorchModule` extends [BaseModule](/api/modules/base-module), inheriting core functionality.
+
+## Constructor
+
+```typescript
+new ExecutorchModule()
+```
+
+Creates a new ExecuTorch module instance.
+
+### Example
+
+```typescript
+import { ExecutorchModule } from 'react-native-executorch';
+
+const model = new ExecutorchModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  modelSource: ResourceSource,
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the model from the specified source.
+
+#### Parameters
+
+<ParamField path="modelSource" type="ResourceSource" required>
+  Resource location of the model binary (.pte file).
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await model.load(
+  'https://example.com/custom_model.pte',
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### forward()
+
+```typescript
+async forward(inputTensor: TensorPtr[]): Promise<TensorPtr[]>
+```
+
+Executes the model's forward pass with the given input tensors.
+
+#### Parameters
+
+<ParamField path="inputTensor" type="TensorPtr[]" required>
+  Array of input tensor pointers. Each `TensorPtr` contains:
+  - `data`: ArrayBuffer containing the tensor data
+  - `shape`: Array of dimensions (e.g., `[1, 3, 224, 224]`)
+  - `dtype`: Data type (e.g., `'float32'`, `'int32'`)
+</ParamField>
+
+#### Returns
+
+An array of output tensor pointers.
+
+#### Example
+
+```typescript
+// Create input tensor
+const inputData = new Float32Array([1.0, 2.0, 3.0, 4.0]);
+const inputTensor: TensorPtr = {
+  data: inputData.buffer,
+  shape: [1, 4],
+  dtype: 'float32'
+};
+
+// Run inference
+const outputTensors = await model.forward([inputTensor]);
+
+// Access output
+const outputTensor = outputTensors[0];
+const outputData = new Float32Array(outputTensor.data);
+console.log('Output:', outputData);
+console.log('Output shape:', outputTensor.shape);
+```
+
+### getInputShape()
+
+```typescript
+async getInputShape(methodName: string, index: number): Promise<number[]>
+```
+
+Gets the input shape for a given method and index.
+
+#### Parameters
+
+<ParamField path="methodName" type="string" required>
+  Method name (typically `'forward'`).
+</ParamField>
+
+<ParamField path="index" type="number" required>
+  Index of the argument which shape is requested.
+</ParamField>
+
+#### Returns
+
+The input shape as an array of numbers.
+
+#### Example
+
+```typescript
+const inputShape = await model.getInputShape('forward', 0);
+console.log('Expected input shape:', inputShape);
+// [1, 3, 224, 224]
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory and releases native resources.
+
+#### Example
+
+```typescript
+model.delete();
+```
+
+## Complete Example: Custom Classifier
+
+```typescript
+import { ExecutorchModule, TensorPtr } from 'react-native-executorch';
+
+class CustomModelRunner {
+  private model: ExecutorchModule;
+  private inputShape: number[] | null = null;
+
+  constructor() {
+    this.model = new ExecutorchModule();
+  }
+
+  async initialize(modelPath: string) {
+    console.log('Loading model...');
+    await this.model.load(
+      modelPath,
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    
+    // Get expected input shape
+    this.inputShape = await this.model.getInputShape('forward', 0);
+    console.log('Model ready! Input shape:', this.inputShape);
+  }
+
+  async runInference(inputData: Float32Array): Promise<Float32Array> {
+    if (!this.inputShape) {
+      throw new Error('Model not initialized');
+    }
+    
+    // Create input tensor
+    const inputTensor: TensorPtr = {
+      data: inputData.buffer,
+      shape: this.inputShape,
+      dtype: 'float32'
+    };
+    
+    // Run forward pass
+    const outputTensors = await this.model.forward([inputTensor]);
+    
+    // Extract output data
+    const outputData = new Float32Array(outputTensors[0].data);
+    return outputData;
+  }
+
+  getInputShape(): number[] | null {
+    return this.inputShape;
+  }
+
+  cleanup() {
+    this.model.delete();
+  }
+}
+
+// Usage
+const runner = new CustomModelRunner();
+await runner.initialize('https://example.com/model.pte');
+
+const inputShape = runner.getInputShape();
+console.log('Expected input:', inputShape);
+
+// Create input data matching expected shape
+const inputSize = inputShape!.reduce((a, b) => a * b, 1);
+const inputData = new Float32Array(inputSize);
+// Fill inputData with your data...
+
+const output = await runner.runInference(inputData);
+console.log('Model output:', output);
+
+runner.cleanup();
+```
+
+## Example: Multi-Input Model
+
+```typescript
+class MultiInputModel {
+  private model: ExecutorchModule;
+
+  constructor() {
+    this.model = new ExecutorchModule();
+  }
+
+  async initialize(modelPath: string) {
+    await this.model.load(modelPath);
+    
+    // Get shapes for multiple inputs
+    const input1Shape = await this.model.getInputShape('forward', 0);
+    const input2Shape = await this.model.getInputShape('forward', 1);
+    
+    console.log('Input 1 shape:', input1Shape);
+    console.log('Input 2 shape:', input2Shape);
+  }
+
+  async runWithMultipleInputs(
+    input1Data: Float32Array,
+    input2Data: Int32Array
+  ) {
+    const input1: TensorPtr = {
+      data: input1Data.buffer,
+      shape: [1, 128],
+      dtype: 'float32'
+    };
+    
+    const input2: TensorPtr = {
+      data: input2Data.buffer,
+      shape: [1, 64],
+      dtype: 'int32'
+    };
+    
+    const outputs = await this.model.forward([input1, input2]);
+    
+    return {
+      output1: new Float32Array(outputs[0].data),
+      output2: new Float32Array(outputs[1].data)
+    };
+  }
+
+  cleanup() {
+    this.model.delete();
+  }
+}
+
+// Usage
+const multiModel = new MultiInputModel();
+await multiModel.initialize('https://example.com/multi_input_model.pte');
+
+const input1 = new Float32Array(128).fill(0.5);
+const input2 = new Int32Array(64).fill(1);
+
+const outputs = await multiModel.runWithMultipleInputs(input1, input2);
+console.log('Output 1:', outputs.output1);
+console.log('Output 2:', outputs.output2);
+
+multiModel.cleanup();
+```
+
+## Example: Preprocessing Pipeline
+
+```typescript
+class ImageModelWithPreprocessing {
+  private model: ExecutorchModule;
+  private mean = [0.485, 0.456, 0.406];
+  private std = [0.229, 0.224, 0.225];
+
+  constructor() {
+    this.model = new ExecutorchModule();
+  }
+
+  async initialize(modelPath: string) {
+    await this.model.load(modelPath);
+  }
+
+  preprocessImage(
+    imageData: Uint8Array,
+    width: number,
+    height: number
+  ): Float32Array {
+    const numPixels = width * height;
+    const tensor = new Float32Array(numPixels * 3);
+    
+    // Normalize and reorder (HWC to CHW)
+    for (let c = 0; c < 3; c++) {
+      for (let i = 0; i < numPixels; i++) {
+        const pixelValue = imageData[i * 3 + c] / 255.0;
+        const normalized = (pixelValue - this.mean[c]) / this.std[c];
+        tensor[c * numPixels + i] = normalized;
+      }
+    }
+    
+    return tensor;
+  }
+
+  async processImage(
+    imageData: Uint8Array,
+    width: number,
+    height: number
+  ) {
+    const preprocessed = this.preprocessImage(imageData, width, height);
+    
+    const inputTensor: TensorPtr = {
+      data: preprocessed.buffer,
+      shape: [1, 3, height, width],
+      dtype: 'float32'
+    };
+    
+    const outputs = await this.model.forward([inputTensor]);
+    return new Float32Array(outputs[0].data);
+  }
+
+  cleanup() {
+    this.model.delete();
+  }
+}
+
+// Usage
+const imageModel = new ImageModelWithPreprocessing();
+await imageModel.initialize('https://example.com/image_model.pte');
+
+const imageData = new Uint8Array(224 * 224 * 3);
+// Fill with image pixel data...
+
+const result = await imageModel.processImage(imageData, 224, 224);
+console.log('Inference result:', result);
+
+imageModel.cleanup();
+```
+
+## Example: Batch Processing
+
+```typescript
+class BatchProcessor {
+  private model: ExecutorchModule;
+
+  constructor() {
+    this.model = new ExecutorchModule();
+  }
+
+  async initialize(modelPath: string) {
+    await this.model.load(modelPath);
+  }
+
+  async processBatch(inputs: Float32Array[], batchSize: number) {
+    // Combine multiple inputs into a batch
+    const batchData = new Float32Array(inputs.length * inputs[0].length);
+    inputs.forEach((input, i) => {
+      batchData.set(input, i * input.length);
+    });
+    
+    const batchTensor: TensorPtr = {
+      data: batchData.buffer,
+      shape: [batchSize, inputs[0].length],
+      dtype: 'float32'
+    };
+    
+    const outputs = await this.model.forward([batchTensor]);
+    const outputData = new Float32Array(outputs[0].data);
+    
+    // Split batch output into individual results
+    const outputSize = outputData.length / batchSize;
+    const results = [];
+    for (let i = 0; i < batchSize; i++) {
+      results.push(
+        outputData.slice(i * outputSize, (i + 1) * outputSize)
+      );
+    }
+    
+    return results;
+  }
+
+  cleanup() {
+    this.model.delete();
+  }
+}
+
+// Usage
+const batchProcessor = new BatchProcessor();
+await batchProcessor.initialize('https://example.com/model.pte');
+
+const inputs = [
+  new Float32Array([1, 2, 3, 4]),
+  new Float32Array([5, 6, 7, 8]),
+  new Float32Array([9, 10, 11, 12])
+];
+
+const results = await batchProcessor.processBatch(inputs, 3);
+results.forEach((result, i) => {
+  console.log(`Result ${i + 1}:`, result);
+});
+
+batchProcessor.cleanup();
+```
+
+## Supported Data Types
+
+The `dtype` field in `TensorPtr` supports:
+
+- `'float32'` - 32-bit floating point
+- `'int32'` - 32-bit signed integer
+- `'int64'` - 64-bit signed integer
+- `'uint8'` - 8-bit unsigned integer
+- `'int8'` - 8-bit signed integer
+
+## Tensor Shape Format
+
+Shapes are arrays representing tensor dimensions:
+
+- Scalar: `[]`
+- Vector: `[N]`
+- Matrix: `[M, N]`
+- Image (CHW): `[C, H, W]`
+- Batch of images: `[B, C, H, W]`
+
+## Performance Considerations
+
+- Minimize tensor copies by reusing buffers
+- Use appropriate data types to reduce memory usage
+- Consider batch processing for multiple inputs
+- Profile model execution with different input sizes
+- Always call `delete()` to free native resources
+
+## Debugging Tips
+
+```typescript
+// Check input shape before running
+const expectedShape = await model.getInputShape('forward', 0);
+console.log('Expected:', expectedShape);
+
+// Verify tensor data
+const tensorData = new Float32Array(inputTensor.data);
+console.log('Min:', Math.min(...tensorData));
+console.log('Max:', Math.max(...tensorData));
+console.log('Mean:', tensorData.reduce((a, b) => a + b) / tensorData.length);
+
+// Check output shape
+console.log('Output shape:', outputTensor.shape);
+```
+
+## See Also
+
+- [BaseModule](/api/modules/base-module) - Base class with shared functionality
+- [TensorPtr Type](/api/types/tensor-ptr)
+- [ResourceSource Type](/api/types/resource-source)
+- Specialized modules for common tasks:
+  - [ClassificationModule](/api/modules/classification-module)
+  - [ObjectDetectionModule](/api/modules/object-detection-module)
+  - [LLMModule](/api/modules/llm-module)

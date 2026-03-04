@@ -1,0 +1,184 @@
+---
+title: 'initExecutorch'
+description: 'Initialize React Native ExecuTorch with a resource fetcher adapter'
+icon: 'rocket'
+---
+
+## Overview
+
+The `initExecutorch` function initializes the React Native ExecuTorch library by configuring a resource fetcher adapter. This is a required setup step that must be called before using any hooks or modules.
+
+## Import
+
+```typescript
+import { initExecutorch, ExecutorchConfig } from 'react-native-executorch';
+```
+
+## Function Signature
+
+```typescript
+function initExecutorch(config: ExecutorchConfig): void
+```
+
+## Parameters
+
+<ParamField path="config" type="ExecutorchConfig" required>
+  Configuration object containing the resource fetcher adapter
+  
+  <Expandable title="properties">
+    <ParamField path="resourceFetcher" type="ResourceFetcherAdapter" required>
+      The resource fetcher adapter implementation for your platform (Expo or Bare React Native)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## ResourceFetcherAdapter Interface
+
+The resource fetcher adapter must implement the following interface:
+
+<ParamField path="fetch" type="function" required>
+  Fetches resources (remote URLs, local files, or embedded assets) and stores them locally
+  
+  ```typescript
+  fetch(
+    callback: (downloadProgress: number) => void,
+    ...sources: ResourceSource[]
+  ): Promise<string[] | null>
+  ```
+  
+  <Expandable title="parameters">
+    <ResponseField name="callback" type="(downloadProgress: number) => void">
+      Optional callback to track download progress (0-1)
+    </ResponseField>
+    <ResponseField name="sources" type="ResourceSource[]">
+      Multiple resources (strings, asset references, or objects)
+    </ResponseField>
+  </Expandable>
+  
+  <Expandable title="returns">
+    Returns a promise that resolves to an array of local file paths (without `file://` prefix) on success, or `null` if interrupted
+  </Expandable>
+</ParamField>
+
+<ParamField path="readAsString" type="function" required>
+  Reads file contents as a string
+  
+  ```typescript
+  readAsString(path: string): Promise<string>
+  ```
+  
+  <Expandable title="parameters">
+    <ResponseField name="path" type="string">
+      Absolute file path to read
+    </ResponseField>
+  </Expandable>
+  
+  <Expandable title="returns">
+    Returns a promise that resolves to the file contents as a string
+  </Expandable>
+</ParamField>
+
+## Usage Examples
+
+### Expo App
+
+```typescript
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// Initialize at app startup (e.g., in App.tsx)
+initExecutorch({
+  resourceFetcher: new ExpoResourceFetcher(),
+});
+```
+
+### Bare React Native App
+
+```typescript
+import { initExecutorch } from 'react-native-executorch';
+import { BareResourceFetcher } from '@react-native-executorch/bare-resource-fetcher';
+
+// Initialize at app startup (e.g., in index.js)
+initExecutorch({
+  resourceFetcher: new BareResourceFetcher(),
+});
+```
+
+### Custom Resource Fetcher
+
+```typescript
+import { initExecutorch, ResourceFetcherAdapter } from 'react-native-executorch';
+
+class CustomResourceFetcher implements ResourceFetcherAdapter {
+  async fetch(
+    callback: (progress: number) => void,
+    ...sources: ResourceSource[]
+  ): Promise<string[] | null> {
+    // Custom implementation for fetching resources
+    const paths: string[] = [];
+    
+    for (const source of sources) {
+      // Download or locate resource
+      const localPath = await this.downloadResource(source);
+      paths.push(localPath);
+      
+      // Report progress
+      callback(paths.length / sources.length);
+    }
+    
+    return paths;
+  }
+  
+  async readAsString(path: string): Promise<string> {
+    // Custom implementation for reading files
+    return await FileSystem.readAsStringAsync(path);
+  }
+  
+  private async downloadResource(source: ResourceSource): Promise<string> {
+    // Implementation details...
+    return '/path/to/downloaded/file';
+  }
+}
+
+initExecutorch({
+  resourceFetcher: new CustomResourceFetcher(),
+});
+```
+
+## Related Functions
+
+### cleanupExecutorch
+
+```typescript
+import { cleanupExecutorch } from 'react-native-executorch';
+
+// Reset the resource fetcher adapter
+cleanupExecutorch();
+```
+
+Cleans up the current resource fetcher setup. Primarily used for testing purposes.
+
+## Notes
+
+<Note>
+  You must call `initExecutorch` before using any hooks or modules in the library. Failure to initialize will result in a `ResourceFetcherAdapterNotInitialized` error.
+</Note>
+
+<Warning>
+  Call `initExecutorch` only once at application startup. Multiple calls will override the previous configuration.
+</Warning>
+
+## Error Handling
+
+If you attempt to use any hook or module without initializing, you'll receive:
+
+```
+ResourceFetcherAdapterNotInitialized: ResourceFetcher adapter is not initialized. 
+Please call initExecutorch({ resourceFetcher: ... }) with a valid adapter.
+```
+
+## See Also
+
+- [Loading Models Guide](/guides/loading-models)
+- [Expo Resource Fetcher](/packages/expo-resource-fetcher)
+- [Bare Resource Fetcher](/packages/bare-resource-fetcher)

@@ -1,0 +1,349 @@
+---
+title: Context Strategies
+description: Manage conversation history and context window limits
+---
+
+# Context Strategies
+
+Context strategies determine how conversation history is managed when it exceeds the model's context window. They ensure your LLM doesn't run out of memory while preserving the most relevant conversation context.
+
+## Why Context Strategies?
+
+LLMs have a maximum context length (e.g., 2048, 4096, or 8192 tokens). When your conversation grows beyond this limit, you need a strategy to:
+
+- Trim old messages while keeping recent context
+- Preserve important messages (like system prompts)
+- Maintain conversation coherence
+- Prevent out-of-memory errors
+
+## Available Strategies
+
+React Native ExecuTorch provides three built-in context strategies:
+
+### NoopContextStrategy
+
+No filtering or trimming - uses the entire message history as-is.
+
+```tsx
+import { NoopContextStrategy } from 'react-native-executorch/utils';
+
+llm.configure({
+  chatConfig: {
+    contextStrategy: new NoopContextStrategy(),
+  },
+});
+```
+
+**Use when:**
+- You manually manage conversation length
+- You have very short conversations
+- You're certain the context won't exceed limits
+
+**Behavior:**
+- Prepends system prompt to the message history
+- No message removal or filtering
+- Ignores `maxContextLength` and token counts
+
+**Example:**
+```typescript
+// Input history: [msg1, msg2, msg3]
+// System prompt: "You are helpful"
+// Output: [system_prompt, msg1, msg2, msg3]
+```
+
+### MessageCountContextStrategy
+
+Retains a fixed number of the most recent messages.
+
+```tsx
+import { MessageCountContextStrategy } from 'react-native-executorch/utils';
+
+llm.configure({
+  chatConfig: {
+    contextStrategy: new MessageCountContextStrategy(10), // Keep last 10 messages
+  },
+});
+```
+
+**Constructor:**
+```typescript
+new MessageCountContextStrategy(windowLength: number = 5)
+```
+
+**Parameters:**
+- `windowLength`: Maximum number of recent messages to keep (default: 5)
+
+**Use when:**
+- You want simple, predictable context management
+- Message length is relatively uniform
+- You need fast, token-count-free trimming
+
+**Behavior:**
+- Keeps the last `windowLength` messages
+- Removes older messages beyond the window
+- System prompt is always included
+- Does not consider actual token count
+
+**Example:**
+```typescript
+const strategy = new MessageCountContextStrategy(3);
+
+// Input history: [msg1, msg2, msg3, msg4, msg5]
+// Output: [system_prompt, msg3, msg4, msg5] (last 3 messages)
+```
+
+### SlidingWindowContextStrategy (Recommended)
+
+Dynamically trims messages based on actual token count to fit within the model's context window.
+
+```tsx
+import { SlidingWindowContextStrategy } from 'react-native-executorch/utils';
+
+llm.configure({
+  chatConfig: {
+    contextStrategy: new SlidingWindowContextStrategy(
+      1000,  // Buffer tokens for generation
+      false  // Don't allow orphaned assistant messages
+    ),
+  },
+});
+```
+
+**Constructor:**
+```typescript
+new SlidingWindowContextStrategy(
+  bufferTokens: number,
+  allowOrphanedAssistantMessages: boolean = false
+)
+```
+
+**Parameters:**
+- `bufferTokens`: Number of tokens to reserve for model generation (e.g., 1000)
+- `allowOrphanedAssistantMessages`: Whether to allow assistant responses without their preceding user message
+
+**Use when:**
+- You want optimal context utilization (recommended for most cases)
+- Messages vary in length
+- You want to prevent context overflow errors
+- You need to maximize context usage while leaving room for generation
+
+**Behavior:**
+- Calculates exact token count of formatted messages
+- Removes oldest messages until tokens fit within: `maxContextLength - bufferTokens`
+- Optionally preserves user-assistant message pairs
+- System prompt is always included
+
+**Example:**
+```typescript
+const strategy = new SlidingWindowContextStrategy(
+  1000, // Reserve 1000 tokens for generation
+  false // Keep user-assistant pairs together
+);
+
+// Assume maxContextLength = 4096
+// Token budget = 4096 - 1000 = 3096 tokens
+// 
+// The strategy will:
+// 1. Start with full history
+// 2. Calculate token count of [system_prompt, ...history]
+// 3. If > 3096 tokens, remove oldest message
+// 4. If orphaned assistant message, remove it too (when allowOrphaned=false)
+// 5. Repeat until tokens <= 3096
+```
+
+## Comparison
+
+| Strategy | Token-Aware | Preserves Pairs | Complexity | Best For |
+|----------|-------------|-----------------|------------|----------|
+| **NoopContextStrategy** | No | N/A | O(1) | Manual management, short conversations |
+| **MessageCountContextStrategy** | No | No | O(1) | Simple apps, uniform messages |
+| **SlidingWindowContextStrategy** | Yes | Optional | O(n) | Production apps, optimal context usage |
+
+## Implementation Details
+
+### Context Strategy Interface
+
+All strategies implement this interface:
+
+```typescript
+interface ContextStrategy {
+  buildContext(
+    systemPrompt: string,
+    history: Message[],
+    maxContextLength: number,
+    getTokenCount: (messages: Message[]) => number
+  ): Message[];
+}
+```
+
+**Parameters:**
+- `systemPrompt`: The system instructions for the model
+- `history`: Complete conversation history
+- `maxContextLength`: Maximum tokens the model can handle
+- `getTokenCount`: Callback to calculate token count of messages
+
+**Returns:**
+- Array of messages optimized for the context window
+
+### Orphaned Assistant Messages
+
+When `allowOrphanedAssistantMessages` is `false` in `SlidingWindowContextStrategy`, the strategy ensures:
+
+```
+BAD (orphaned):
+[system_prompt, assistant_message, user_message, assistant_message]
+
+GOOD (paired):
+[system_prompt, user_message, assistant_message]
+```
+
+This prevents the model from seeing an assistant response without understanding what user question it was answering.
+
+## Practical Examples
+
+### Short Conversations
+
+```tsx
+import { NoopContextStrategy } from 'react-native-executorch/utils';
+
+// No context management needed
+llm.configure({
+  chatConfig: {
+    systemPrompt: 'You are a helpful assistant.',
+    contextStrategy: new NoopContextStrategy(),
+  },
+});
+```
+
+### Simple Chat App
+
+```tsx
+import { MessageCountContextStrategy } from 'react-native-executorch/utils';
+
+// Keep last 15 messages
+llm.configure({
+  chatConfig: {
+    systemPrompt: 'You are a friendly chatbot.',
+    contextStrategy: new MessageCountContextStrategy(15),
+  },
+});
+```
+
+### Production App (Recommended)
+
+```tsx
+import { SlidingWindowContextStrategy } from 'react-native-executorch/utils';
+
+// Token-aware strategy with optimal settings
+llm.configure({
+  chatConfig: {
+    systemPrompt: 'You are an AI assistant.',
+    contextStrategy: new SlidingWindowContextStrategy(
+      2000, // Reserve 2000 tokens for response
+      false // Keep conversation pairs together
+    ),
+  },
+});
+```
+
+### Long-Context Model
+
+```tsx
+import { SlidingWindowContextStrategy } from 'react-native-executorch/utils';
+
+// For models with large context windows (e.g., 8192 tokens)
+llm.configure({
+  chatConfig: {
+    systemPrompt: 'You are an AI assistant with access to long context.',
+    contextStrategy: new SlidingWindowContextStrategy(
+      4000, // Reserve more tokens for longer responses
+      false
+    ),
+  },
+});
+```
+
+## Custom Context Strategy
+
+You can implement your own strategy by implementing the `ContextStrategy` interface:
+
+```typescript
+import { ContextStrategy, Message } from 'react-native-executorch';
+
+class CustomContextStrategy implements ContextStrategy {
+  buildContext(
+    systemPrompt: string,
+    history: Message[],
+    maxContextLength: number,
+    getTokenCount: (messages: Message[]) => number
+  ): Message[] {
+    // Your custom logic
+    // For example: keep first and last N messages
+    const keepFirst = 3;
+    const keepLast = 5;
+    
+    const beginning = history.slice(0, keepFirst);
+    const end = history.slice(-keepLast);
+    
+    return [
+      { content: systemPrompt, role: 'system' },
+      ...beginning,
+      ...end,
+    ];
+  }
+}
+
+// Use it
+llm.configure({
+  chatConfig: {
+    contextStrategy: new CustomContextStrategy(),
+  },
+});
+```
+
+## Best Practices
+
+1. **Use SlidingWindowContextStrategy for production** - It provides the most reliable context management
+2. **Set appropriate buffer tokens** - Reserve enough tokens for the model's response (1000-2000 is typical)
+3. **Consider conversation patterns** - Set `allowOrphanedAssistantMessages: false` to preserve Q&A pairs
+4. **Monitor token usage** - Use `getTotalTokenCount()` to understand your token consumption
+5. **Test with long conversations** - Ensure your strategy handles extended conversations gracefully
+
+## Debugging Context Issues
+
+If you encounter context-related errors:
+
+```tsx
+useEffect(() => {
+  if (!llm.isGenerating && llm.response) {
+    const promptTokens = llm.getPromptTokenCount();
+    const generatedTokens = llm.getGeneratedTokenCount();
+    const totalTokens = llm.getTotalTokenCount();
+    
+    console.log('Token usage:', {
+      prompt: promptTokens,
+      generated: generatedTokens,
+      total: totalTokens,
+      historyLength: llm.messageHistory.length,
+    });
+  }
+}, [llm.isGenerating]);
+```
+
+## Type Definitions
+
+```typescript
+interface ContextStrategy {
+  buildContext(
+    systemPrompt: string,
+    history: Message[],
+    maxContextLength: number,
+    getTokenCount: (messages: Message[]) => number
+  ): Message[];
+}
+
+interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+```

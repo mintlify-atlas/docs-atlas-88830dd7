@@ -1,0 +1,296 @@
+---
+title: Installation
+description: Install React Native ExecuTorch and set up your development environment
+---
+
+## Prerequisites
+
+Before installing React Native ExecuTorch, ensure your project meets these requirements:
+
+<Warning>
+  **New Architecture Required**: React Native ExecuTorch only supports the [New React Native Architecture](https://reactnative.dev/architecture/landing-page).
+</Warning>
+
+| Requirement | Minimum Version |
+|-------------|----------------|
+| **iOS** | 17.0 |
+| **Android** | 13 (API level 33) |
+| **React Native** | 0.81 |
+
+## Installation
+
+<Tabs>
+  <Tab title="npm">
+    <Steps>
+      <Step title="Install core package">
+        ```bash
+        npm install react-native-executorch
+        ```
+      </Step>
+      
+      <Step title="Install resource fetcher">
+        <Tabs>
+          <Tab title="Expo">
+            ```bash
+            npm install @react-native-executorch/expo-resource-fetcher
+            npm install expo-file-system expo-asset
+            ```
+          </Tab>
+          <Tab title="Bare React Native">
+            ```bash
+            npm install @react-native-executorch/bare-resource-fetcher
+            npm install @dr.pogodin/react-native-fs @kesha-antonov/react-native-background-downloader
+            ```
+          </Tab>
+        </Tabs>
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="yarn">
+    <Steps>
+      <Step title="Install core package">
+        ```bash
+        yarn add react-native-executorch
+        ```
+      </Step>
+      
+      <Step title="Install resource fetcher">
+        <Tabs>
+          <Tab title="Expo">
+            ```bash
+            yarn add @react-native-executorch/expo-resource-fetcher
+            yarn add expo-file-system expo-asset
+            ```
+          </Tab>
+          <Tab title="Bare React Native">
+            ```bash
+            yarn add @react-native-executorch/bare-resource-fetcher
+            yarn add @dr.pogodin/react-native-fs @kesha-antonov/react-native-background-downloader
+            ```
+          </Tab>
+        </Tabs>
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="pnpm">
+    <Steps>
+      <Step title="Install core package">
+        ```bash
+        pnpm add react-native-executorch
+        ```
+      </Step>
+      
+      <Step title="Install resource fetcher">
+        <Tabs>
+          <Tab title="Expo">
+            ```bash
+            pnpm add @react-native-executorch/expo-resource-fetcher
+            pnpm add expo-file-system expo-asset
+            ```
+          </Tab>
+          <Tab title="Bare React Native">
+            ```bash
+            pnpm add @react-native-executorch/bare-resource-fetcher
+            pnpm add @dr.pogodin/react-native-fs @kesha-antonov/react-native-background-downloader
+            ```
+          </Tab>
+        </Tabs>
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Platform-Specific Setup
+
+<Tabs>
+  <Tab title="Expo">
+    <Steps>
+      <Step title="Install dependencies">
+        Make sure you've installed the resource fetcher and its dependencies:
+        ```bash
+        yarn add @react-native-executorch/expo-resource-fetcher
+        yarn add expo-file-system expo-asset
+        ```
+      </Step>
+
+      <Step title="Run prebuild (if needed)">
+        If using Expo with custom native code:
+        ```bash
+        npx expo prebuild
+        ```
+      </Step>
+
+      <Step title="Run your app">
+        ```bash
+        # For iOS
+        npx expo run:ios
+
+        # For Android
+        npx expo run:android
+        ```
+      </Step>
+    </Steps>
+
+    <Note>
+      Expo projects require `expo-file-system` and `expo-asset` for downloading and managing model files.
+    </Note>
+  </Tab>
+
+  <Tab title="Bare React Native">
+    <Steps>
+      <Step title="Install dependencies">
+        Make sure you've installed the resource fetcher and its dependencies:
+        ```bash
+        yarn add @react-native-executorch/bare-resource-fetcher
+        yarn add @dr.pogodin/react-native-fs @kesha-antonov/react-native-background-downloader
+        ```
+      </Step>
+
+      <Step title="Install iOS pods">
+        ```bash
+        cd ios && pod install && cd ..
+        ```
+      </Step>
+
+      <Step title="Run your app">
+        ```bash
+        # For iOS
+        npx react-native run-ios
+
+        # For Android
+        npx react-native run-android
+        ```
+      </Step>
+    </Steps>
+
+    <Note>
+      Bare React Native projects use `@dr.pogodin/react-native-fs` for file system operations and `@kesha-antonov/react-native-background-downloader` for background downloads.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Initialize ExecuTorch
+
+After installation, initialize ExecuTorch in your app's entry point (e.g., `App.tsx` or `_layout.tsx`):
+
+<CodeGroup>
+```tsx Expo
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+initExecutorch({
+  resourceFetcher: ExpoResourceFetcher,
+});
+```
+
+```tsx Bare React Native
+import { initExecutorch } from 'react-native-executorch';
+import { BareResourceFetcher } from '@react-native-executorch/bare-resource-fetcher';
+
+initExecutorch({
+  resourceFetcher: BareResourceFetcher,
+});
+```
+</CodeGroup>
+
+<Warning>
+  Call `initExecutorch()` **before** using any AI models or hooks. A good place is at the top level of your app, before component rendering.
+</Warning>
+
+## Verify Installation
+
+To verify the installation is working correctly, try importing the library:
+
+```tsx
+import { useLLM, LLAMA3_2_1B } from 'react-native-executorch';
+
+function TestComponent() {
+  const llm = useLLM({ model: LLAMA3_2_1B, preventLoad: true });
+  
+  console.log('ExecuTorch initialized:', llm !== null);
+  
+  return null;
+}
+```
+
+If there are no errors, you're ready to start using React Native ExecuTorch!
+
+## Common Issues
+
+### New Architecture Not Enabled
+
+If you see errors about TurboModules or Fabric, ensure the New Architecture is enabled:
+
+<Tabs>
+  <Tab title="iOS">
+    In `ios/Podfile`, ensure:
+    ```ruby
+    ENV['RCT_NEW_ARCH_ENABLED'] = '1'
+    ```
+  </Tab>
+  <Tab title="Android">
+    In `android/gradle.properties`, ensure:
+    ```properties
+    newArchEnabled=true
+    ```
+  </Tab>
+</Tabs>
+
+### Android Minimum SDK
+
+If you encounter SDK version errors on Android, verify in `android/build.gradle`:
+
+```gradle
+minSdkVersion = 33  // Android 13
+```
+
+### iOS Deployment Target
+
+For iOS version errors, check `ios/Podfile`:
+
+```ruby
+platform :ios, '17.0'
+```
+
+### Module Not Found Errors
+
+If you see "Module not found" errors:
+
+1. Clear your package manager cache:
+   ```bash
+   # npm
+   npm cache clean --force
+   
+   # yarn
+   yarn cache clean
+   
+   # pnpm
+   pnpm store prune
+   ```
+
+2. Reinstall dependencies:
+   ```bash
+   rm -rf node_modules
+   yarn install
+   ```
+
+3. Clean and rebuild:
+   ```bash
+   # iOS
+   cd ios && rm -rf Pods Podfile.lock && pod install && cd ..
+   
+   # Android
+   cd android && ./gradlew clean && cd ..
+   ```
+
+## Next Steps
+
+<Card
+  title="Quickstart Guide"
+  icon="rocket"
+  href="/quickstart"
+>
+  Build your first AI-powered feature with React Native ExecuTorch
+</Card>

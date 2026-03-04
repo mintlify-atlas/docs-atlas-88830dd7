@@ -1,0 +1,494 @@
+---
+title: Text to Speech
+description: Generate natural-sounding speech from text using on-device TTS models
+---
+
+The `useTextToSpeech` hook converts text into natural-sounding speech using the Kokoro TTS model. It supports both complete audio generation and streaming playback for real-time applications.
+
+## Basic Usage
+
+```typescript
+import { useTextToSpeech } from 'react-native-executorch';
+
+function TextReader() {
+  const { forward, isReady, error } = useTextToSpeech({
+    model: {
+      type: 'kokoro',
+      durationPredictorSource: require('./models/duration-predictor.pte'),
+      synthesizerSource: require('./models/synthesizer.pte'),
+    },
+    voice: {
+      lang: 'en-us',
+      voiceSource: require('./voices/en-us-voice.bin'),
+      extra: {
+        taggerSource: require('./models/tagger.pte'),
+        lexiconSource: require('./models/lexicon.bin'),
+      },
+    },
+  });
+
+  const speak = async () => {
+    if (!isReady) return;
+
+    const audio = await forward({
+      text: 'Hello, this is a text to speech demo.',
+      speed: 1.0,
+    });
+
+    // Play the audio using your audio player
+    console.log('Generated audio samples:', audio.length);
+  };
+
+  return (
+    <View>
+      {error && <Text>Error: {error.message}</Text>}
+      <Button onPress={speak} title="Speak" disabled={!isReady} />
+    </View>
+  );
+}
+```
+
+## Hook Signature
+
+### useTextToSpeech(props)
+
+```typescript
+function useTextToSpeech(props: TextToSpeechProps): TextToSpeechType;
+```
+
+#### Parameters
+
+<ParamField path="model" type="KokoroConfig" required>
+  Kokoro TTS model configuration.
+  
+  <Expandable title="properties">
+    <ParamField path="type" type="'kokoro'" required>
+      Model type identifier. Currently only `'kokoro'` is supported.
+    </ParamField>
+    
+    <ParamField path="durationPredictorSource" type="ResourceSource" required>
+      Location of the duration predictor .pte file. Can be a URL (string), local file (require), or resource ID (number).
+    </ParamField>
+    
+    <ParamField path="synthesizerSource" type="ResourceSource" required>
+      Location of the synthesizer .pte file. Can be a URL (string), local file (require), or resource ID (number).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="voice" type="VoiceConfig" required>
+  Voice configuration including language and embeddings.
+  
+  <Expandable title="properties">
+    <ParamField path="lang" type="TextToSpeechLanguage" required>
+      Speaker's language. Currently supports `'en-us'` (American English) or `'en-gb'` (British English).
+    </ParamField>
+    
+    <ParamField path="voiceSource" type="ResourceSource" required>
+      Location of the voice embedding binary file.
+    </ParamField>
+    
+    <ParamField path="extra" type="KokoroVoiceExtras">
+      Additional Kokoro-specific voice resources.
+      
+      <Expandable title="properties">
+        <ParamField path="taggerSource" type="ResourceSource" required>
+          Location of the phoneme tagger model binary.
+        </ParamField>
+        
+        <ParamField path="lexiconSource" type="ResourceSource" required>
+          Location of the pronunciation lexicon binary.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading on mount. Useful for lazy loading scenarios.
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if model loading or generation fails.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the model has loaded successfully and is ready for synthesis.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether audio generation is currently in progress.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="forward" type="(input: TextToSpeechInput) => Promise<Float32Array>">
+  Generate complete audio for the given text in a single pass. Returns 22kHz mono audio.
+</ResponseField>
+
+<ResponseField name="stream" type="(input: TextToSpeechStreamingInput) => Promise<void>">
+  Generate audio incrementally with callbacks for real-time playback. Optimal for long text.
+</ResponseField>
+
+<ResponseField name="streamStop" type="() => void">
+  Stop the current streaming generation process.
+</ResponseField>
+
+## Generation Methods
+
+### Complete Audio Generation
+
+Generate the entire audio at once:
+
+```typescript
+const { forward, isReady } = useTextToSpeech({ model, voice });
+
+const audio = await forward({
+  text: 'Welcome to React Native ExecuTorch.',
+  speed: 1.0, // Normal speed
+});
+
+// audio is Float32Array with 22kHz mono samples
+console.log('Sample rate: 22050 Hz');
+console.log('Duration:', audio.length / 22050, 'seconds');
+```
+
+### Streaming Audio Generation
+
+Generate and play audio incrementally:
+
+```typescript
+const { stream, isReady } = useTextToSpeech({ model, voice });
+
+await stream({
+  text: 'This is a longer text that will be synthesized in chunks.',
+  speed: 1.2, // 20% faster
+  onBegin: async () => {
+    console.log('Starting audio generation...');
+    // Initialize audio player
+  },
+  onNext: async (audioChunk: Float32Array) => {
+    console.log('Received chunk:', audioChunk.length, 'samples');
+    // Play chunk immediately
+    await audioPlayer.playChunk(audioChunk);
+  },
+  onEnd: async () => {
+    console.log('Audio generation complete');
+    // Cleanup
+  },
+});
+```
+
+## Types
+
+### TextToSpeechInput
+
+Input for audio generation:
+
+```typescript
+interface TextToSpeechInput {
+  text: string; // Text to synthesize
+  speed?: number; // Speed multiplier (default: 1.0)
+}
+```
+
+### TextToSpeechStreamingInput
+
+Input for streaming generation with lifecycle callbacks:
+
+```typescript
+interface TextToSpeechStreamingInput extends TextToSpeechInput {
+  onBegin?: () => void | Promise<void>; // Called when generation starts
+  onNext?: (audio: Float32Array) => void | Promise<void>; // Called for each chunk
+  onEnd?: () => void | Promise<void>; // Called when generation completes
+}
+```
+
+### TextToSpeechLanguage
+
+Supported language codes:
+
+```typescript
+type TextToSpeechLanguage =
+  | 'en-us' // American English
+  | 'en-gb'; // British English
+```
+
+### VoiceConfig
+
+Voice configuration structure:
+
+```typescript
+interface VoiceConfig {
+  lang: TextToSpeechLanguage;
+  voiceSource: ResourceSource;
+  extra?: KokoroVoiceExtras;
+}
+```
+
+### KokoroVoiceExtras
+
+Kokoro-specific voice resources:
+
+```typescript
+interface KokoroVoiceExtras {
+  taggerSource: ResourceSource; // Phoneme tagger model
+  lexiconSource: ResourceSource; // Pronunciation lexicon
+}
+```
+
+### KokoroConfig
+
+Kokoro TTS model configuration:
+
+```typescript
+interface KokoroConfig {
+  type: 'kokoro';
+  durationPredictorSource: ResourceSource;
+  synthesizerSource: ResourceSource;
+}
+```
+
+## Audio Format
+
+The generated audio has the following characteristics:
+
+- **Sample rate**: 22,050 Hz (22kHz)
+- **Channels**: Mono (single channel)
+- **Data type**: Float32Array
+- **Value range**: -1.0 to 1.0 (normalized)
+- **Buffer layout**: Contiguous samples in time order
+
+### Playing Generated Audio
+
+Example using a typical audio player:
+
+```typescript
+import { Audio } from 'expo-av';
+
+const { forward } = useTextToSpeech({ model, voice });
+
+const speakText = async (text: string) => {
+  // Generate audio
+  const audioData = await forward({ text, speed: 1.0 });
+
+  // Convert Float32Array to format suitable for your audio player
+  const audioBuffer = convertToAudioBuffer(audioData, 22050);
+
+  // Play audio
+  const sound = new Audio.Sound();
+  await sound.loadAsync({ uri: audioBuffer });
+  await sound.playAsync();
+};
+```
+
+## Advanced Usage
+
+### Speed Control
+
+Adjust speech rate for different contexts:
+
+```typescript
+// Slower speech for clarity (0.8x speed)
+await forward({ text: 'Important instructions here.', speed: 0.8 });
+
+// Normal speed (1.0x)
+await forward({ text: 'Regular conversation.', speed: 1.0 });
+
+// Faster speech for quick playback (1.5x speed)
+await forward({ text: 'Quick summary.', speed: 1.5 });
+```
+
+### Streaming with Progress Tracking
+
+```typescript
+function TTSWithProgress() {
+  const [progress, setProgress] = useState(0);
+  const [totalChunks, setTotalChunks] = useState(0);
+  const { stream } = useTextToSpeech({ model, voice });
+
+  const speakWithTracking = async (text: string) => {
+    let chunkCount = 0;
+
+    await stream({
+      text,
+      onBegin: async () => {
+        setProgress(0);
+        setTotalChunks(0);
+      },
+      onNext: async (audioChunk) => {
+        chunkCount++;
+        setTotalChunks(chunkCount);
+        setProgress((prev) => prev + audioChunk.length);
+        
+        // Play chunk
+        await playAudioChunk(audioChunk);
+      },
+      onEnd: async () => {
+        console.log(`Completed ${chunkCount} chunks`);
+      },
+    });
+  };
+
+  return (
+    <View>
+      <Text>Chunks: {totalChunks}</Text>
+      <Text>Samples: {progress}</Text>
+    </View>
+  );
+}
+```
+
+### Multiple Voices
+
+Switch between different voice configurations:
+
+```typescript
+const americanVoice: VoiceConfig = {
+  lang: 'en-us',
+  voiceSource: require('./voices/en-us-male.bin'),
+  extra: {
+    taggerSource: require('./models/tagger.pte'),
+    lexiconSource: require('./models/en-us-lexicon.bin'),
+  },
+};
+
+const britishVoice: VoiceConfig = {
+  lang: 'en-gb',
+  voiceSource: require('./voices/en-gb-female.bin'),
+  extra: {
+    taggerSource: require('./models/tagger.pte'),
+    lexiconSource: require('./models/en-gb-lexicon.bin'),
+  },
+};
+
+// Use different hooks for different voices
+const american = useTextToSpeech({ model, voice: americanVoice });
+const british = useTextToSpeech({ model, voice: britishVoice });
+```
+
+### Interrupting Playback
+
+```typescript
+const { stream, streamStop } = useTextToSpeech({ model, voice });
+
+// Start streaming
+const speakPromise = stream({
+  text: 'This is a very long text that will take time to synthesize...',
+  onNext: async (chunk) => {
+    await playAudioChunk(chunk);
+  },
+});
+
+// Stop mid-stream
+const handleStop = () => {
+  streamStop(); // Interrupts generation
+  stopAudioPlayback(); // Stop playing audio
+};
+```
+
+## Error Handling
+
+```typescript
+const { forward, error, isReady } = useTextToSpeech({ model, voice });
+
+if (error) {
+  console.error('TTS Error:', error.message);
+  // Handle specific error codes
+}
+
+try {
+  const audio = await forward({ text: 'Hello world' });
+} catch (err) {
+  if (err.code === 'MODULE_NOT_LOADED') {
+    console.error('Model not ready yet');
+  } else if (err.code === 'MODEL_GENERATING') {
+    console.error('Already generating audio');
+  } else {
+    console.error('Generation failed:', err.message);
+  }
+}
+```
+
+## Best Practices
+
+1. **Text Length**: For long text, use streaming mode to start playback sooner and reduce memory usage.
+
+2. **Speed Range**: Keep speed between 0.5 and 2.0 for natural-sounding speech. Extreme values may degrade quality.
+
+3. **Memory Management**: Clear audio buffers after playback to free memory, especially for long content.
+
+4. **Error Recovery**: Always check `isReady` before calling `forward()` or `stream()`.
+
+5. **Concurrent Requests**: The hook prevents concurrent generation. Wait for completion or use `streamStop()` before starting new generation.
+
+6. **Text Preprocessing**: Clean up text (remove special characters, normalize numbers) for better pronunciation.
+
+7. **Resource Caching**: Models and voices are cached after first download. Reuse the same sources to avoid re-downloading.
+
+## Performance Tips
+
+- **Streaming vs. Complete**: Use streaming for text longer than a few sentences to reduce perceived latency.
+- **Chunk Processing**: Process audio chunks asynchronously to maintain smooth playback.
+- **Preload Models**: Set `preventLoad: false` (default) to load models on component mount.
+- **Voice Selection**: Choose appropriate voice embeddings for your use case (male/female, accent, etc.).
+
+## Common Use Cases
+
+### Audio Book Reader
+
+```typescript
+function AudioBookReader({ chapters }: { chapters: string[] }) {
+  const { stream, isReady } = useTextToSpeech({ model, voice });
+  const [currentChapter, setCurrentChapter] = useState(0);
+
+  const readChapter = async (chapterText: string) => {
+    await stream({
+      text: chapterText,
+      speed: 1.1, // Slightly faster for continuous listening
+      onNext: async (chunk) => {
+        await playAudioChunk(chunk);
+      },
+      onEnd: async () => {
+        // Auto-advance to next chapter
+        if (currentChapter < chapters.length - 1) {
+          setCurrentChapter((prev) => prev + 1);
+        }
+      },
+    });
+  };
+
+  return <AudioPlayer onPlay={() => readChapter(chapters[currentChapter])} />;
+}
+```
+
+### Accessibility Screen Reader
+
+```typescript
+function ScreenReader({ content }: { content: string }) {
+  const { forward, isReady } = useTextToSpeech({ model, voice });
+
+  const speak = async () => {
+    const audio = await forward({
+      text: content,
+      speed: 1.0,
+    });
+    await playAudio(audio);
+  };
+
+  return (
+    <TouchableOpacity onPress={speak} disabled={!isReady}>
+      <Text>{content}</Text>
+    </TouchableOpacity>
+  );
+}
+```
+
+## Related
+
+- [Speech to Text](/speech/speech-to-text) - Convert speech back to text
+- [Speech Overview](/speech/overview) - Complete guide to speech features

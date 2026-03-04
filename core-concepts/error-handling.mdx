@@ -1,0 +1,963 @@
+---
+title: Error Handling
+description: Comprehensive guide to error types, codes, and handling strategies in React Native ExecuTorch
+---
+
+## Overview
+
+React Native ExecuTorch provides a structured error system with typed error codes and detailed error messages. All errors are thrown as `RnExecutorchError` instances with specific error codes from the `RnExecutorchErrorCode` enum.
+
+## RnExecutorchError Class
+
+The custom error class that all library errors use:
+
+```typescript
+class RnExecutorchError extends Error {
+  /**
+   * The error code representing the type of error
+   */
+  public code: RnExecutorchErrorCode;
+  
+  /**
+   * The error message
+   */
+  public message: string;
+  
+  /**
+   * The original cause of the error, if any
+   */
+  public cause?: unknown;
+  
+  constructor(code: number, message: string, cause?: unknown);
+}
+```
+
+Location: `~/workspace/source/packages/react-native-executorch/src/errors/errorUtils.ts:6-34`
+
+### Basic Error Handling
+
+```typescript
+import { RnExecutorchError, RnExecutorchErrorCode } from 'react-native-executorch';
+
+try {
+  await module.load(modelSource);
+} catch (error) {
+  if (error instanceof RnExecutorchError) {
+    console.error(`Error ${error.code}: ${error.message}`);
+    
+    if (error.cause) {
+      console.error('Caused by:', error.cause);
+    }
+  } else {
+    // Unexpected error type
+    console.error('Unknown error:', error);
+  }
+}
+```
+
+## Error Code Categories
+
+Error codes are organized into categories:
+
+### Application-Level Errors (100-199)
+
+Errors from React Native ExecuTorch library code.
+
+### ExecuTorch Runtime Errors (0-99)
+
+Errors from the underlying ExecuTorch C++ runtime.
+
+### Resource Fetcher Errors (180-186)
+
+Errors related to downloading and fetching resources.
+
+## Complete Error Code Reference
+
+### Application Errors
+
+#### UnknownError (101)
+
+Umbrella error for unexpected failures or 3rd-party library errors.
+
+```typescript
+RnExecutorchErrorCode.UnknownError
+```
+
+**When thrown**:
+- Unexpected exceptions from native code
+- 3rd-party library errors
+- Unhandled edge cases
+
+**Example**:
+```typescript
+try {
+  await module.load(modelSource);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.UnknownError) {
+    console.error('Unexpected error occurred:', error.message);
+    // Log to error tracking service
+    Sentry.captureException(error);
+  }
+}
+```
+
+#### ModuleNotLoaded (102)
+
+Thrown when trying to run inference on an unloaded model.
+
+```typescript
+RnExecutorchErrorCode.ModuleNotLoaded
+```
+
+**When thrown**:
+- Calling `forward()` before `load()`
+- Calling `generateFromFrame()` before loading
+- Using model after `delete()` was called
+
+**Example**:
+```typescript
+const module = new ClassificationModule();
+
+try {
+  // Error: Model not loaded yet
+  await module.forward(image);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.ModuleNotLoaded) {
+    console.error('Load the model first!');
+    await module.load(modelSource);
+    await module.forward(image); // Now works
+  }
+}
+```
+
+#### FileWriteFailed (103)
+
+Error saving output files (e.g., generated images).
+
+```typescript
+RnExecutorchErrorCode.FileWriteFailed
+```
+
+**When thrown**:
+- Insufficient storage space
+- Permission denied to write
+- Invalid output path
+
+#### ModelGenerating (104)
+
+Thrown when starting inference while another is in progress.
+
+```typescript
+RnExecutorchErrorCode.ModelGenerating
+```
+
+**When thrown**:
+- Calling `generate()` while previous generation is ongoing
+- Concurrent inference attempts (not supported)
+
+**Example**:
+```typescript
+let isGenerating = false;
+
+async function safeGenerate(prompt: string) {
+  if (isGenerating) {
+    console.warn('Generation already in progress');
+    return;
+  }
+  
+  isGenerating = true;
+  try {
+    const result = await llm.generate(prompt);
+    return result;
+  } catch (error) {
+    if (error.code === RnExecutorchErrorCode.ModelGenerating) {
+      console.error('Concurrent generation attempted');
+    }
+  } finally {
+    isGenerating = false;
+  }
+}
+```
+
+#### LanguageNotSupported (105)
+
+Language not supported by multilingual model (OCR, STT).
+
+```typescript
+RnExecutorchErrorCode.LanguageNotSupported
+```
+
+**Example**:
+```typescript
+try {
+  await ocr.forward(image, { language: 'unsupported-lang' });
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.LanguageNotSupported) {
+    console.error('Language not available in this model');
+    // Fall back to default language
+    await ocr.forward(image, { language: 'en' });
+  }
+}
+```
+
+#### InvalidConfig (112)
+
+Invalid configuration parameters.
+
+```typescript
+RnExecutorchErrorCode.InvalidConfig
+```
+
+**When thrown**:
+- LLM `topP` outside [0, 1] range
+- Invalid temperature values
+- Incorrect parameter types
+
+**Example**:
+```typescript
+llm.configure({
+  generationConfig: {
+    topP: 1.5, // Invalid: must be 0-1
+    temperature: 0.7
+  }
+});
+// Throws InvalidConfig error
+```
+
+#### InvalidModelSource (255)
+
+Invalid type for model source.
+
+```typescript
+RnExecutorchErrorCode.InvalidModelSource
+```
+
+**When thrown**:
+- Wrong type for ResourceSource (expected string, got object, etc.)
+
+#### UnexpectedNumInputs (97)
+
+Number of inputs doesn't match model metadata.
+
+```typescript
+RnExecutorchErrorCode.UnexpectedNumInputs
+```
+
+#### ThreadPoolError (113)
+
+ExecuTorch threadpool problem.
+
+```typescript
+RnExecutorchErrorCode.ThreadPoolError
+```
+
+#### FileReadFailed (114)
+
+Failed to read input file.
+
+```typescript
+RnExecutorchErrorCode.FileReadFailed
+```
+
+**When thrown**:
+- Invalid image URL
+- Unsupported image format
+- File doesn't exist
+- Permission denied
+
+**Example**:
+```typescript
+try {
+  await classifier.forward('invalid://path/image.jpg');
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.FileReadFailed) {
+    console.error('Could not read image file');
+    // Try alternative source
+  }
+}
+```
+
+#### InvalidModelOutput (115)
+
+Model output size is unexpected.
+
+```typescript
+RnExecutorchErrorCode.InvalidModelOutput
+```
+
+#### WrongDimensions (116)
+
+Input tensor dimensions don't match model expectations.
+
+```typescript
+RnExecutorchErrorCode.WrongDimensions
+```
+
+**Example**:
+```typescript
+// Model expects 224x224, but got 512x512
+try {
+  await model.forward(largeTensor);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.WrongDimensions) {
+    console.error('Resize input to match model requirements');
+  }
+}
+```
+
+#### InvalidUserInput (117)
+
+Invalid input to API methods.
+
+```typescript
+RnExecutorchErrorCode.InvalidUserInput
+```
+
+**When thrown**:
+- Empty message array to LLM `generate()`
+- Null or undefined required parameters
+
+**Example**:
+```typescript
+try {
+  await llm.generate([]); // Empty array
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.InvalidUserInput) {
+    console.error('Provide at least one message');
+  }
+}
+```
+
+#### DownloadInterrupted (118)
+
+Download was cancelled or paused.
+
+```typescript
+RnExecutorchErrorCode.DownloadInterrupted
+```
+
+**When thrown**:
+- User cancelled download
+- `pauseFetching()` or `cancelFetching()` was called
+- Network interrupted download
+
+**Example**:
+```typescript
+try {
+  const paths = await ResourceFetcher.fetch(
+    (progress) => console.log(progress),
+    modelUrl
+  );
+  
+  if (!paths) {
+    throw new RnExecutorchError(
+      RnExecutorchErrorCode.DownloadInterrupted,
+      'Download interrupted'
+    );
+  }
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.DownloadInterrupted) {
+    console.log('Download was stopped, you can resume it');
+  }
+}
+```
+
+#### PlatformNotSupported (119)
+
+Feature not supported on current platform.
+
+```typescript
+RnExecutorchErrorCode.PlatformNotSupported
+```
+
+#### TokenizerError (167)
+
+Tokenizer or tokenization process error.
+
+```typescript
+RnExecutorchErrorCode.TokenizerError
+```
+
+#### MultilingualConfiguration (160)
+
+Mismatch between multilingual and language settings (STT).
+
+```typescript
+RnExecutorchErrorCode.MultilingualConfiguration
+```
+
+#### MissingDataChunk (161)
+
+Streaming transcription attempted without audio data.
+
+```typescript
+RnExecutorchErrorCode.MissingDataChunk
+```
+
+#### StreamingNotStarted (162)
+
+Trying to stop/insert data into non-started stream.
+
+```typescript
+RnExecutorchErrorCode.StreamingNotStarted
+```
+
+**Example**:
+```typescript
+try {
+  await stt.stopStreaming();
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.StreamingNotStarted) {
+    console.error('Call startStreaming() first');
+  }
+}
+```
+
+#### StreamingInProgress (163)
+
+Starting new stream while another is active.
+
+```typescript
+RnExecutorchErrorCode.StreamingInProgress
+```
+
+### Resource Fetcher Errors
+
+#### ResourceFetcherDownloadFailed (180)
+
+Resource download failed.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherDownloadFailed
+```
+
+**When thrown**:
+- Invalid URL
+- Network error
+- 404 Not Found
+- Timeout
+
+**Example**:
+```typescript
+try {
+  await ResourceFetcher.fetch(() => {}, invalidUrl);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.ResourceFetcherDownloadFailed) {
+    console.error('Download failed:', error.message);
+    // Retry with exponential backoff
+    await retryWithBackoff(() => 
+      ResourceFetcher.fetch(() => {}, invalidUrl)
+    );
+  }
+}
+```
+
+#### ResourceFetcherDownloadInProgress (181)
+
+Attempting to start download that's already in progress.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherDownloadInProgress
+```
+
+**Example**:
+```typescript
+// First call starts download
+const promise1 = ResourceFetcher.fetch(() => {}, modelUrl);
+
+try {
+  // Second call fails - already downloading
+  const promise2 = ResourceFetcher.fetch(() => {}, modelUrl);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.ResourceFetcherDownloadInProgress) {
+    console.log('Already downloading, wait for first call');
+    await promise1;
+  }
+}
+```
+
+#### ResourceFetcherAlreadyPaused (182)
+
+Trying to pause already-paused download.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherAlreadyPaused
+```
+
+**Example**:
+```typescript
+await ExpoResourceFetcher.pauseFetching(modelUrl);
+
+try {
+  await ExpoResourceFetcher.pauseFetching(modelUrl); // Error
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.ResourceFetcherAlreadyPaused) {
+    console.log('Already paused');
+  }
+}
+```
+
+#### ResourceFetcherAlreadyOngoing (183)
+
+Trying to resume already-ongoing download.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherAlreadyOngoing
+```
+
+#### ResourceFetcherNotActive (184)
+
+Trying to pause/resume/cancel inactive download.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherNotActive
+```
+
+**Example**:
+```typescript
+try {
+  await ExpoResourceFetcher.pauseFetching(modelUrl);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.ResourceFetcherNotActive) {
+    console.log('No active download for this URL');
+  }
+}
+```
+
+#### ResourceFetcherMissingUri (185)
+
+Required URI information missing for download.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherMissingUri
+```
+
+#### ResourceFetcherAdapterNotInitialized (186)
+
+Attempting to load resources without initialization.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherAdapterNotInitialized
+```
+
+**When thrown**:
+- Calling `ResourceFetcher.fetch()` before `initExecutorch()`
+- Using hooks before initialization
+
+**Example**:
+```typescript
+try {
+  await ResourceFetcher.fetch(() => {}, modelUrl);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.ResourceFetcherAdapterNotInitialized) {
+    console.error('Call initExecutorch() first!');
+    
+    // Initialize
+    initExecutorch({
+      resourceFetcher: ExpoResourceFetcher
+    });
+    
+    // Retry
+    await ResourceFetcher.fetch(() => {}, modelUrl);
+  }
+}
+```
+
+Location: `~/workspace/source/packages/react-native-executorch/src/utils/ResourceFetcher.ts:87-95`
+
+### ExecuTorch Runtime Errors
+
+These come from the underlying C++ ExecuTorch runtime:
+
+#### Ok (0)
+
+Successful operation (not an error).
+
+#### Internal (1)
+
+Internal ExecuTorch error.
+
+#### InvalidState (2)
+
+Executor in invalid state for operation.
+
+#### EndOfMethod (3)
+
+No more execution steps to run.
+
+#### NotSupported (16)
+
+Operation not supported in current context.
+
+#### NotImplemented (17)
+
+Operation not yet implemented.
+
+#### InvalidArgument (18)
+
+Invalid argument provided.
+
+```typescript
+RnExecutorchErrorCode.InvalidArgument
+```
+
+#### InvalidType (19)
+
+Object has invalid type for operation.
+
+#### OperatorMissing (20)
+
+Operator(s) missing in operator registry.
+
+```typescript
+RnExecutorchErrorCode.OperatorMissing
+```
+
+**When thrown**:
+- Model uses operators not included in build
+- Custom operators not registered
+
+#### NotFound (32)
+
+Requested resource not found.
+
+#### MemoryAllocationFailed (33)
+
+Could not allocate requested memory.
+
+```typescript
+RnExecutorchErrorCode.MemoryAllocationFailed
+```
+
+**When thrown**:
+- Insufficient device memory
+- Large model on low-memory device
+- Memory fragmentation
+
+**Example**:
+```typescript
+try {
+  await hugeModel.load(modelSource);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.MemoryAllocationFailed) {
+    console.error('Not enough memory for this model');
+    // Try smaller model or free memory
+    await smallerModel.load(smallModelSource);
+  }
+}
+```
+
+#### AccessFailed (34)
+
+Could not access resource.
+
+#### InvalidProgram (35)
+
+Error in program contents.
+
+```typescript
+RnExecutorchErrorCode.InvalidProgram
+```
+
+**When thrown**:
+- Corrupted `.pte` file
+- Wrong model format
+- Incompatible ExecuTorch version
+
+**Example**:
+```typescript
+try {
+  await module.load(corruptedModel);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.InvalidProgram) {
+    console.error('Model file is corrupted or invalid');
+    // Re-download model
+    await ExpoResourceFetcher.deleteResources(modelUrl);
+    await module.load(modelUrl); // Download fresh copy
+  }
+}
+```
+
+#### InvalidExternalData (36)
+
+Error in external data contents.
+
+#### OutOfResources (37)
+
+Not enough resources for operation.
+
+#### DelegateInvalidCompatibility (48)
+
+Backend received incompatible delegate version.
+
+#### DelegateMemoryAllocationFailed (49)
+
+Backend failed to allocate memory.
+
+#### DelegateInvalidHandle (50)
+
+Invalid delegate handle.
+
+Location: `~/workspace/source/packages/react-native-executorch/src/errors/ErrorCodes.ts:4-185`
+
+## Error Parsing
+
+The `parseUnknownError` utility converts unknown errors to `RnExecutorchError`:
+
+```typescript
+export function parseUnknownError(e: unknown): RnExecutorchError {
+  if (e instanceof RnExecutorchError) {
+    return e;
+  }
+  if (isRnExecutorchErrorLike(e)) {
+    return new RnExecutorchError(e.code, e.message);
+  }
+  if (e instanceof Error) {
+    return new RnExecutorchError(RnExecutorchErrorCode.Internal, e.message, e);
+  }
+  if (typeof e === 'string') {
+    return new RnExecutorchError(RnExecutorchErrorCode.Internal, e);
+  }
+  return new RnExecutorchError(RnExecutorchErrorCode.Internal, String(e));
+}
+```
+
+Location: `~/workspace/source/packages/react-native-executorch/src/errors/errorUtils.ts:49-66`
+
+## Best Practices
+
+### 1. Always Use Try-Catch
+
+```typescript
+try {
+  await module.load(modelSource);
+  const result = await module.forward(input);
+} catch (error) {
+  handleError(error);
+}
+```
+
+### 2. Check Error Codes
+
+```typescript
+if (error instanceof RnExecutorchError) {
+  switch (error.code) {
+    case RnExecutorchErrorCode.ModuleNotLoaded:
+      // Handle not loaded
+      break;
+    case RnExecutorchErrorCode.MemoryAllocationFailed:
+      // Handle out of memory
+      break;
+    default:
+      // Handle other errors
+  }
+}
+```
+
+### 3. Provide User Feedback
+
+```typescript
+function getErrorMessage(error: RnExecutorchError): string {
+  switch (error.code) {
+    case RnExecutorchErrorCode.ResourceFetcherDownloadFailed:
+      return 'Failed to download model. Check your internet connection.';
+    
+    case RnExecutorchErrorCode.MemoryAllocationFailed:
+      return 'Not enough memory. Try closing other apps.';
+    
+    case RnExecutorchErrorCode.ModuleNotLoaded:
+      return 'Model is loading. Please wait...';
+    
+    default:
+      return `An error occurred: ${error.message}`;
+  }
+}
+```
+
+### 4. Log for Debugging
+
+```typescript
+import { Logger } from 'react-native-executorch';
+
+try {
+  await module.load(modelSource);
+} catch (error) {
+  Logger.error('Model load failed:', error);
+  
+  // Send to error tracking
+  if (error instanceof RnExecutorchError) {
+    analytics.logError({
+      code: error.code,
+      message: error.message,
+      cause: error.cause
+    });
+  }
+  
+  throw error;
+}
+```
+
+### 5. Implement Retry Logic
+
+```typescript
+async function loadWithRetry(
+  module: ExecutorchModule,
+  source: ResourceSource,
+  maxRetries = 3
+) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await module.load(source);
+      return; // Success
+    } catch (error) {
+      if (error.code === RnExecutorchErrorCode.ResourceFetcherDownloadFailed) {
+        if (i < maxRetries - 1) {
+          console.log(`Retry ${i + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+          continue;
+        }
+      }
+      throw error; // Non-retryable or max retries reached
+    }
+  }
+}
+```
+
+### 6. Clean Up on Error
+
+```typescript
+let module: ExecutorchModule | null = null;
+
+try {
+  module = new ExecutorchModule();
+  await module.load(modelSource);
+  await module.forward(input);
+} catch (error) {
+  console.error('Error:', error);
+  // Clean up even on error
+  module?.delete();
+  module = null;
+  throw error;
+} finally {
+  // Ensure cleanup
+  if (module) {
+    module.delete();
+  }
+}
+```
+
+## Complete Error Handling Example
+
+```typescript
+import {
+  ExecutorchModule,
+  RnExecutorchError,
+  RnExecutorchErrorCode,
+  ResourceFetcher,
+  Logger
+} from 'react-native-executorch';
+
+class ModelManager {
+  private module: ExecutorchModule | null = null;
+  private isLoading = false;
+  
+  async loadModel(
+    source: ResourceSource,
+    onProgress?: (progress: number) => void
+  ) {
+    if (this.isLoading) {
+      throw new Error('Load already in progress');
+    }
+    
+    this.isLoading = true;
+    
+    try {
+      this.module = new ExecutorchModule();
+      
+      await this.module.load(
+        source,
+        (progress) => {
+          onProgress?.(progress);
+        }
+      );
+      
+      Logger.info('Model loaded successfully');
+      
+    } catch (error) {
+      if (error instanceof RnExecutorchError) {
+        switch (error.code) {
+          case RnExecutorchErrorCode.ResourceFetcherAdapterNotInitialized:
+            Logger.error('ResourceFetcher not initialized');
+            throw new Error('App not initialized properly');
+          
+          case RnExecutorchErrorCode.ResourceFetcherDownloadFailed:
+            Logger.error('Download failed:', error.message);
+            throw new Error('Failed to download model. Check your internet.');
+          
+          case RnExecutorchErrorCode.MemoryAllocationFailed:
+            Logger.error('Out of memory');
+            throw new Error('Not enough memory to load model');
+          
+          case RnExecutorchErrorCode.InvalidProgram:
+            Logger.error('Invalid model file');
+            // Try to delete corrupted file
+            await ResourceFetcher.deleteResources(source);
+            throw new Error('Model file is corrupted. Please try again.');
+          
+          default:
+            Logger.error('Unexpected error:', error.code, error.message);
+            throw new Error(`Failed to load model: ${error.message}`);
+        }
+      }
+      
+      // Non-RnExecutorchError
+      Logger.error('Unknown error:', error);
+      throw error;
+      
+    } finally {
+      this.isLoading = false;
+    }
+  }
+  
+  async predict(input: any) {
+    if (!this.module) {
+      throw new Error('Model not loaded');
+    }
+    
+    try {
+      return await this.module.forward(input);
+    } catch (error) {
+      if (error instanceof RnExecutorchError) {
+        switch (error.code) {
+          case RnExecutorchErrorCode.ModuleNotLoaded:
+            throw new Error('Model was unloaded');
+          
+          case RnExecutorchErrorCode.FileReadFailed:
+            throw new Error('Could not read input file');
+          
+          case RnExecutorchErrorCode.WrongDimensions:
+            throw new Error('Input has wrong dimensions');
+          
+          default:
+            Logger.error('Prediction error:', error.code, error.message);
+            throw new Error(`Prediction failed: ${error.message}`);
+        }
+      }
+      throw error;
+    }
+  }
+  
+  cleanup() {
+    if (this.module) {
+      this.module.delete();
+      this.module = null;
+    }
+  }
+}
+```
+
+## Next Steps
+
+- [Architecture](/core-concepts/architecture) - Understand the overall system architecture
+- [Resource Fetching](/core-concepts/resource-fetching) - Learn about download error handling
+- [Model Loading](/core-concepts/model-loading) - See how errors occur during loading

@@ -1,0 +1,546 @@
+---
+title: 'TokenizerModule'
+description: 'Class-based API for text tokenization and encoding'
+icon: 'brackets-curly'
+---
+
+## Overview
+
+`TokenizerModule` provides a class-based interface for tokenizer functionalities. It converts text to token IDs and vice versa, essential for text processing with language models.
+
+## When to Use
+
+**Use `TokenizerModule` when:**
+- You need manual control over tokenization
+- You're working outside React components
+- You need low-level token manipulation
+- You want to integrate tokenization into non-React code
+
+**Use `useTokenizer` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Constructor
+
+```typescript
+new TokenizerModule()
+```
+
+Creates a new tokenizer module instance.
+
+### Example
+
+```typescript
+import { TokenizerModule } from 'react-native-executorch';
+
+const tokenizer = new TokenizerModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  tokenizer: { tokenizerSource: ResourceSource },
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the tokenizer from the specified source.
+
+#### Parameters
+
+<ParamField path="tokenizer.tokenizerSource" type="ResourceSource" required>
+  Resource location pointing to the tokenizer JSON file.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await tokenizer.load(
+  { tokenizerSource: 'https://example.com/tokenizer.json' },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### encode()
+
+```typescript
+async encode(input: string): Promise<number[]>
+```
+
+Converts a string into an array of token IDs.
+
+#### Parameters
+
+<ParamField path="input" type="string" required>
+  The input string to be tokenized.
+</ParamField>
+
+#### Returns
+
+An array of token IDs.
+
+#### Example
+
+```typescript
+const tokens = await tokenizer.encode('Hello, world!');
+console.log('Token IDs:', tokens);
+// [9906, 11, 1917, 0]
+
+console.log('Number of tokens:', tokens.length);
+```
+
+### decode()
+
+```typescript
+async decode(
+  tokens: number[],
+  skipSpecialTokens?: boolean
+): Promise<string>
+```
+
+Converts an array of token IDs into a string.
+
+#### Parameters
+
+<ParamField path="tokens" type="number[]" required>
+  Array of token IDs to be decoded.
+</ParamField>
+
+<ParamField path="skipSpecialTokens" type="boolean" default="true">
+  Whether to skip special tokens during decoding (e.g., [PAD], [CLS], [SEP]).
+</ParamField>
+
+#### Returns
+
+The decoded string.
+
+#### Example
+
+```typescript
+const text = await tokenizer.decode([9906, 11, 1917, 0]);
+console.log('Decoded text:', text);
+// "Hello, world!"
+
+// Include special tokens
+const textWithSpecial = await tokenizer.decode([101, 9906, 102], false);
+console.log('With special tokens:', textWithSpecial);
+// "[CLS] Hello [SEP]"
+```
+
+### getVocabSize()
+
+```typescript
+async getVocabSize(): Promise<number>
+```
+
+Returns the size of the tokenizer's vocabulary.
+
+#### Returns
+
+The vocabulary size.
+
+#### Example
+
+```typescript
+const vocabSize = await tokenizer.getVocabSize();
+console.log('Vocabulary size:', vocabSize);
+// 50257 (for GPT-2 tokenizer)
+```
+
+### idToToken()
+
+```typescript
+async idToToken(tokenId: number): Promise<string>
+```
+
+Returns the token string associated with the given ID.
+
+#### Parameters
+
+<ParamField path="tokenId" type="number" required>
+  ID of the token.
+</ParamField>
+
+#### Returns
+
+The token string associated with the ID.
+
+#### Example
+
+```typescript
+const token = await tokenizer.idToToken(9906);
+console.log('Token:', token);
+// "Hello"
+```
+
+### tokenToId()
+
+```typescript
+async tokenToId(token: string): Promise<number>
+```
+
+Returns the ID associated with the given token string.
+
+#### Parameters
+
+<ParamField path="token" type="string" required>
+  The token string.
+</ParamField>
+
+#### Returns
+
+The ID associated with the token.
+
+#### Example
+
+```typescript
+const id = await tokenizer.tokenToId('Hello');
+console.log('Token ID:', id);
+// 9906
+```
+
+## Complete Example: Text Analysis
+
+```typescript
+import { TokenizerModule } from 'react-native-executorch';
+
+class TextAnalyzer {
+  private tokenizer: TokenizerModule;
+
+  constructor() {
+    this.tokenizer = new TokenizerModule();
+  }
+
+  async initialize() {
+    console.log('Loading tokenizer...');
+    await this.tokenizer.load(
+      { tokenizerSource: 'https://example.com/tokenizer.json' },
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('Tokenizer ready!');
+  }
+
+  async analyzeText(text: string) {
+    const tokens = await this.tokenizer.encode(text);
+    const decoded = await this.tokenizer.decode(tokens);
+    const vocabSize = await this.tokenizer.getVocabSize();
+    
+    // Get individual tokens
+    const tokenStrings = await Promise.all(
+      tokens.map(id => this.tokenizer.idToToken(id))
+    );
+    
+    return {
+      originalText: text,
+      decodedText: decoded,
+      tokenCount: tokens.length,
+      tokenIds: tokens,
+      tokens: tokenStrings,
+      vocabSize,
+      avgTokenLength: text.length / tokens.length
+    };
+  }
+
+  async countTokens(text: string): Promise<number> {
+    const tokens = await this.tokenizer.encode(text);
+    return tokens.length;
+  }
+}
+
+// Usage
+const analyzer = new TextAnalyzer();
+await analyzer.initialize();
+
+const result = await analyzer.analyzeText('Hello, how are you doing today?');
+
+console.log('Analysis Results:');
+console.log('Original text:', result.originalText);
+console.log('Token count:', result.tokenCount);
+console.log('Tokens:', result.tokens);
+console.log('Token IDs:', result.tokenIds);
+console.log('Vocabulary size:', result.vocabSize);
+console.log('Avg chars per token:', result.avgTokenLength.toFixed(2));
+
+// Quick token counting
+const count = await analyzer.countTokens('This is a test.');
+console.log('Tokens in text:', count);
+```
+
+## Example: Token Budget Manager
+
+```typescript
+class TokenBudgetManager {
+  private tokenizer: TokenizerModule;
+  private maxTokens: number;
+
+  constructor(maxTokens: number) {
+    this.tokenizer = new TokenizerModule();
+    this.maxTokens = maxTokens;
+  }
+
+  async initialize() {
+    await this.tokenizer.load({
+      tokenizerSource: 'https://example.com/tokenizer.json'
+    });
+  }
+
+  async truncateToFit(text: string): Promise<string> {
+    const tokens = await this.tokenizer.encode(text);
+    
+    if (tokens.length <= this.maxTokens) {
+      return text;
+    }
+    
+    // Truncate tokens
+    const truncatedTokens = tokens.slice(0, this.maxTokens);
+    return await this.tokenizer.decode(truncatedTokens);
+  }
+
+  async splitIntoChunks(text: string): Promise<string[]> {
+    const tokens = await this.tokenizer.encode(text);
+    const chunks: string[] = [];
+    
+    for (let i = 0; i < tokens.length; i += this.maxTokens) {
+      const chunkTokens = tokens.slice(i, i + this.maxTokens);
+      const chunkText = await this.tokenizer.decode(chunkTokens);
+      chunks.push(chunkText);
+    }
+    
+    return chunks;
+  }
+
+  async getRemainingBudget(text: string): Promise<number> {
+    const tokens = await this.tokenizer.encode(text);
+    return Math.max(0, this.maxTokens - tokens.length);
+  }
+}
+
+// Usage
+const budgetManager = new TokenBudgetManager(100); // Max 100 tokens
+await budgetManager.initialize();
+
+const longText = 'Very long text that exceeds the token budget...';
+
+// Truncate to fit
+const truncated = await budgetManager.truncateToFit(longText);
+console.log('Truncated text:', truncated);
+
+// Split into chunks
+const chunks = await budgetManager.splitIntoChunks(longText);
+console.log('Chunks:', chunks.length);
+
+// Check remaining budget
+const remaining = await budgetManager.getRemainingBudget('Current text');
+console.log('Tokens remaining:', remaining);
+```
+
+## Example: Vocabulary Explorer
+
+```typescript
+class VocabularyExplorer {
+  private tokenizer: TokenizerModule;
+
+  constructor() {
+    this.tokenizer = new TokenizerModule();
+  }
+
+  async initialize() {
+    await this.tokenizer.load({
+      tokenizerSource: 'https://example.com/tokenizer.json'
+    });
+  }
+
+  async findTokenIds(words: string[]): Promise<Map<string, number>> {
+    const results = new Map<string, number>();
+    
+    for (const word of words) {
+      const id = await this.tokenizer.tokenToId(word);
+      results.set(word, id);
+    }
+    
+    return results;
+  }
+
+  async compareTokenization(texts: string[]) {
+    const results = [];
+    
+    for (const text of texts) {
+      const tokens = await this.tokenizer.encode(text);
+      const tokenStrings = await Promise.all(
+        tokens.map(id => this.tokenizer.idToToken(id))
+      );
+      
+      results.push({
+        text,
+        tokenCount: tokens.length,
+        tokens: tokenStrings
+      });
+    }
+    
+    return results;
+  }
+
+  async exploreRange(startId: number, endId: number) {
+    const tokens = [];
+    
+    for (let id = startId; id <= endId; id++) {
+      const token = await this.tokenizer.idToToken(id);
+      tokens.push({ id, token });
+    }
+    
+    return tokens;
+  }
+}
+
+// Usage
+const explorer = new VocabularyExplorer();
+await explorer.initialize();
+
+// Find specific token IDs
+const ids = await explorer.findTokenIds(['hello', 'world', 'AI']);
+ids.forEach((id, word) => {
+  console.log(`"${word}" -> ${id}`);
+});
+
+// Compare tokenization
+const comparison = await explorer.compareTokenization([
+  'Hello world',
+  'Hello, world!',
+  'hello world'
+]);
+comparison.forEach(result => {
+  console.log(`"${result.text}" -> ${result.tokenCount} tokens`);
+  console.log('  Tokens:', result.tokens);
+});
+
+// Explore token range
+const range = await explorer.exploreRange(0, 10);
+range.forEach(({ id, token }) => {
+  console.log(`${id}: "${token}"`);
+});
+```
+
+## Example: Encode/Decode Utilities
+
+```typescript
+class TokenizerUtils {
+  private tokenizer: TokenizerModule;
+
+  constructor() {
+    this.tokenizer = new TokenizerModule();
+  }
+
+  async initialize() {
+    await this.tokenizer.load({
+      tokenizerSource: 'https://example.com/tokenizer.json'
+    });
+  }
+
+  async encodeWithDetails(text: string) {
+    const tokens = await this.tokenizer.encode(text);
+    
+    const details = await Promise.all(
+      tokens.map(async (id, index) => ({
+        index,
+        id,
+        token: await this.tokenizer.idToToken(id)
+      }))
+    );
+    
+    return {
+      text,
+      totalTokens: tokens.length,
+      details
+    };
+  }
+
+  async roundTrip(text: string): Promise<boolean> {
+    const tokens = await this.tokenizer.encode(text);
+    const decoded = await this.tokenizer.decode(tokens);
+    return text === decoded;
+  }
+
+  async getTokenBoundaries(text: string) {
+    const tokens = await this.tokenizer.encode(text);
+    const tokenStrings = await Promise.all(
+      tokens.map(id => this.tokenizer.idToToken(id))
+    );
+    
+    const boundaries = [];
+    let position = 0;
+    
+    for (const token of tokenStrings) {
+      const start = position;
+      const end = position + token.length;
+      boundaries.push({ token, start, end });
+      position = end;
+    }
+    
+    return boundaries;
+  }
+}
+
+// Usage
+const utils = new TokenizerUtils();
+await utils.initialize();
+
+// Detailed encoding
+const details = await utils.encodeWithDetails('Hello, world!');
+console.log('Encoding details:');
+details.details.forEach(d => {
+  console.log(`  [${d.index}] ID ${d.id}: "${d.token}"`);
+});
+
+// Test round-trip encoding
+const isLossless = await utils.roundTrip('Test text');
+console.log('Lossless encoding:', isLossless);
+
+// Get token boundaries
+const boundaries = await utils.getTokenBoundaries('Hello, world!');
+boundaries.forEach(b => {
+  console.log(`"${b.token}" at ${b.start}-${b.end}`);
+});
+```
+
+## Use Cases
+
+- **Token Counting**: Count tokens for API limits or cost estimation
+- **Text Truncation**: Trim text to fit within token budgets
+- **Text Chunking**: Split long texts into token-based chunks
+- **Vocabulary Analysis**: Explore tokenizer vocabulary
+- **Model Input Preparation**: Convert text to token IDs for models
+- **Token-level Processing**: Manipulate text at the token level
+- **Cost Estimation**: Estimate API costs based on token usage
+
+## Common Tokenizers
+
+- **GPT-2/GPT-3**: Byte-pair encoding (BPE) with ~50k vocab
+- **BERT**: WordPiece tokenization with ~30k vocab
+- **T5**: SentencePiece with ~32k vocab
+- **LLaMA**: SentencePiece with ~32k vocab
+
+## Performance Considerations
+
+- Tokenization is very fast (typically < 1ms for short texts)
+- Cache tokenized results for frequently used texts
+- Empty array decode returns empty string immediately
+- Always use the same tokenizer as the model you're working with
+
+## See Also
+
+- [useTokenizer Hook](/api/hooks/use-tokenizer) - React hook alternative
+- [LLMModule](/api/modules/llm-module) - Uses tokenizer internally
+- [ResourceSource Type](/api/types/resource-source)

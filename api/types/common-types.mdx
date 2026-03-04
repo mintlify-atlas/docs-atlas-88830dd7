@@ -1,0 +1,140 @@
+---
+title: 'Common Types'
+description: 'Common TypeScript types used across React Native ExecuTorch'
+---
+
+## ResourceSource
+
+Represents a source of a resource, which can be a string (e.g., URL or file path), a number (e.g., resource ID), or an object (e.g., binary data).
+
+```typescript
+type ResourceSource = string | number | object;
+```
+
+## ScalarType
+
+Enum representing the scalar types of tensors.
+
+```typescript
+enum ScalarType {
+  BYTE = 0,           // Byte type (8-bit unsigned integer)
+  CHAR = 1,           // Character type (8-bit signed integer)
+  SHORT = 2,          // Short integer type (16-bit signed integer)
+  INT = 3,            // Integer type (32-bit signed integer)
+  LONG = 4,           // Long integer type (64-bit signed integer)
+  HALF = 5,           // Half-precision floating point type (16-bit)
+  FLOAT = 6,          // Single-precision floating point type (32-bit)
+  DOUBLE = 7,         // Double-precision floating point type (64-bit)
+  BOOL = 11,          // Boolean type
+  QINT8 = 12,         // Quantized 8-bit signed integer type
+  QUINT8 = 13,        // Quantized 8-bit unsigned integer type
+  QINT32 = 14,        // Quantized 32-bit signed integer type
+  QUINT4X2 = 16,      // Packed Quantized Unsigned 4-bit Integers type (2 number in 1 byte)
+  QUINT2X4 = 17,      // Packed Quantized Unsigned 2-bit Integer type (4 numbers in 1 byte)
+  BITS16 = 22,        // Raw Bits type
+  FLOAT8E5M2 = 23,    // Quantized 8-bit floating point type: Sign bit, 5 Exponent bits, 2 Mantissa bits
+  FLOAT8E4M3FN = 24,  // Quantized 8-bit floating point type: Sign bit, 4 Exponent bits, 3 Mantissa bits
+  FLOAT8E5M2FNUZ = 25,// Quantized 8-bit floating point type with No Unsigned Zero (NUZ): Sign bit, 5 Exponent bits, 2 Mantissa bits
+  FLOAT8E4M3FNUZ = 26,// Quantized 8-bit floating point type with No Unsigned Zero (NUZ): Sign bit, 4 Exponent bits, 3 Mantissa bits
+  UINT16 = 27,        // Unsigned 16-bit integer type
+  UINT32 = 28,        // Unsigned 32-bit integer type
+  UINT64 = 29,        // Unsigned 64-bit integer type
+}
+```
+
+## TensorBuffer
+
+Represents the data buffer of a tensor, which can be one of several typed array formats.
+
+```typescript
+type TensorBuffer =
+  | ArrayBuffer
+  | Float32Array
+  | Float64Array
+  | Int8Array
+  | Int16Array
+  | Int32Array
+  | Uint8Array
+  | Uint16Array
+  | Uint32Array
+  | BigInt64Array
+  | BigUint64Array;
+```
+
+## TensorPtr
+
+Represents a pointer to a tensor, including its data buffer, size dimensions, and scalar type.
+
+<ResponseField name="dataPtr" type="TensorBuffer" required>
+  The data buffer of the tensor.
+</ResponseField>
+
+<ResponseField name="sizes" type="number[]" required>
+  An array representing the size of each dimension of the tensor.
+</ResponseField>
+
+<ResponseField name="scalarType" type="ScalarType" required>
+  The scalar type of the tensor, as defined in the `ScalarType` enum.
+</ResponseField>
+
+## LabelEnum
+
+A readonly record mapping string keys to numeric or string values. Used to represent enum-like label maps for models.
+
+```typescript
+type LabelEnum = Readonly<Record<string, number | string>>;
+```
+
+## Triple
+
+A readonly triple of values, typically used for per-channel normalization parameters.
+
+```typescript
+type Triple<T> = readonly [T, T, T];
+```
+
+## PixelData
+
+Represents raw pixel data in RGB format for vision models.
+
+This type extends TensorPtr with constraints specific to image data:
+- dataPtr must be Uint8Array (8-bit unsigned integers)
+- scalarType is always BYTE (ScalarType.BYTE)
+- sizes represents [height, width, channels] where channels must be 3 (RGB)
+
+<ResponseField name="dataPtr" type="Uint8Array" required>
+  RGB pixel data as Uint8Array. Expected format: RGB (3 channels), not RGBA or BGRA. Size must equal: width * height * 3.
+</ResponseField>
+
+<ResponseField name="sizes" type="[number, number, 3]" required>
+  Dimensions of the pixel data: [height, width, channels].
+  - sizes[0]: height (number of rows)
+  - sizes[1]: width (number of columns)
+  - sizes[2]: channels (must be 3 for RGB)
+</ResponseField>
+
+<ResponseField name="scalarType" type="ScalarType.BYTE" required>
+  Scalar type is always BYTE for pixel data.
+</ResponseField>
+
+### Example
+
+```typescript
+const pixelData: PixelData = {
+  dataPtr: new Uint8Array(width * height * 3), // RGB pixel data
+  sizes: [height, width, 3], // [height, width, channels]
+  scalarType: ScalarType.BYTE
+};
+```
+
+## Frame
+
+Frame data for vision model processing.
+
+<ResponseField name="getNativeBuffer" type="() => { pointer: bigint; release(): void }" required>
+  Pointer to native platform buffer (zero-copy, best performance).
+  - On iOS: CVPixelBufferRef pointer
+  - On Android: AHardwareBuffer* pointer
+  
+  Obtain from Vision Camera v5: `frame.getNativeBuffer().pointer`
+</ResponseField>

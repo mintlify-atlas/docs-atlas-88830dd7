@@ -1,0 +1,330 @@
+---
+title: 'Computer Vision Types'
+description: 'TypeScript types for Computer Vision functionality'
+---
+
+## Classification Types
+
+### ClassificationProps
+
+Props for the `useClassification` hook.
+
+<ResponseField name="model" type="object" required>
+  Model configuration object
+  
+  <Expandable title="properties">
+    <ResponseField name="modelSource" type="ResourceSource" required>
+      The source of the classification model binary.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="preventLoad" type="boolean">
+  Boolean that can prevent automatic model loading (and downloading the data if you load it for the first time) after running the hook.
+</ResponseField>
+
+### ClassificationType
+
+Return type for the `useClassification` hook. Manages the state and operations for Computer Vision image classification.
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains the error object if the model failed to load, download, or encountered a runtime error during classification.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the classification model is loaded and ready to process images.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Represents the download progress of the model binary as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="forward" type="(imageSource: string) => Promise<{ [category: string]: number }>">
+  Executes the model's forward pass to classify the provided image.
+  
+  **Parameters:**
+  - `imageSource` (string) - A string representing the image source (e.g., a file path, URI, or base64 string) to be classified.
+  
+  **Returns:** A Promise that resolves to the classification result (typically containing labels and confidence scores).
+  
+  **Throws:** `RnExecutorchError` if the model is not loaded or is currently processing another image.
+</ResponseField>
+
+## Object Detection Types
+
+### Bbox
+
+Represents a bounding box for a detected object in an image.
+
+<ResponseField name="x1" type="number" required>
+  The x-coordinate of the bottom-left corner of the bounding box.
+</ResponseField>
+
+<ResponseField name="y1" type="number" required>
+  The y-coordinate of the bottom-left corner of the bounding box.
+</ResponseField>
+
+<ResponseField name="x2" type="number" required>
+  The x-coordinate of the top-right corner of the bounding box.
+</ResponseField>
+
+<ResponseField name="y2" type="number" required>
+  The y-coordinate of the top-right corner of the bounding box.
+</ResponseField>
+
+### Detection
+
+Represents a detected object within an image, including its bounding box, label, and confidence score.
+
+<ResponseField name="bbox" type="Bbox" required>
+  The bounding box of the detected object, defined by its top-left (x1, y1) and bottom-right (x2, y2) coordinates.
+</ResponseField>
+
+<ResponseField name="label" type="keyof L" required>
+  The class label of the detected object.
+</ResponseField>
+
+<ResponseField name="score" type="number" required>
+  The confidence score of the detection, typically ranging from 0 to 1.
+</ResponseField>
+
+### ObjectDetectionModelSources
+
+Per-model config for `ObjectDetectionModule.fromModelName`. Each model name maps to its required fields.
+
+```typescript
+type ObjectDetectionModelSources =
+  | { modelName: 'ssdlite-320-mobilenet-v3-large'; modelSource: ResourceSource }
+  | { modelName: 'rf-detr-nano'; modelSource: ResourceSource };
+```
+
+### ObjectDetectionModelName
+
+Union of all built-in object detection model names.
+
+```typescript
+type ObjectDetectionModelName = ObjectDetectionModelSources['modelName'];
+```
+
+### ObjectDetectionConfig
+
+Configuration for a custom object detection model.
+
+<ResponseField name="labelMap" type="T extends LabelEnum" required>
+  The label map for the model.
+</ResponseField>
+
+<ResponseField name="preprocessorConfig" type="object">
+  Optional preprocessor configuration
+  
+  <Expandable title="properties">
+    <ResponseField name="normMean" type="Triple<number>">
+      Per-channel mean values for normalization.
+    </ResponseField>
+    
+    <ResponseField name="normStd" type="Triple<number>">
+      Per-channel standard deviation values for normalization.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### ObjectDetectionProps
+
+Props for the `useObjectDetection` hook.
+
+<ResponseField name="model" type="C extends ObjectDetectionModelSources" required>
+  The model config containing `modelName` and `modelSource`.
+</ResponseField>
+
+<ResponseField name="preventLoad" type="boolean">
+  Boolean that can prevent automatic model loading (and downloading the data if you load it for the first time) after running the hook.
+</ResponseField>
+
+### ObjectDetectionType
+
+Return type for the `useObjectDetection` hook. Manages the state and operations for Computer Vision object detection tasks.
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains the error object if the model failed to load, download, or encountered a runtime error during detection.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the object detection model is loaded and ready to process images.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Represents the download progress of the model binary as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="forward" type="(input: string | PixelData, detectionThreshold?: number) => Promise<Detection<L>[]>">
+  Executes the model's forward pass with automatic input type detection.
+  
+  **Parameters:**
+  - `input` (string | PixelData) - Image source (string path/URI or PixelData object)
+  - `detectionThreshold` (number, optional) - An optional number between 0 and 1 representing the minimum confidence score. Default is 0.7.
+  
+  **Returns:** A Promise that resolves to an array of `Detection` objects.
+  
+  **Throws:** `RnExecutorchError` if the model is not loaded or is currently processing another image.
+</ResponseField>
+
+<ResponseField name="runOnFrame" type="((frame: Frame, detectionThreshold: number) => Detection<L>[]) | null">
+  Synchronous worklet function for real-time VisionCamera frame processing. Automatically handles native buffer extraction and cleanup.
+  
+  **Use this for VisionCamera frame processing in worklets.** For async processing, use `forward()` instead.
+  
+  Available after model is loaded (`isReady: true`).
+  
+  **Parameters:**
+  - `frame` (Frame) - VisionCamera Frame object
+  - `detectionThreshold` (number) - The threshold for detection sensitivity.
+  
+  **Returns:** Array of Detection objects representing detected items in the frame.
+</ResponseField>
+
+## Semantic Segmentation Types
+
+### SemanticSegmentationConfig
+
+Configuration for a custom semantic segmentation model.
+
+<ResponseField name="labelMap" type="T extends LabelEnum" required>
+  The enum-like object mapping class names to indices.
+</ResponseField>
+
+<ResponseField name="preprocessorConfig" type="object">
+  Optional preprocessing parameters.
+  
+  <Expandable title="properties">
+    <ResponseField name="normMean" type="Triple<number>">
+      Per-channel mean values for input normalization.
+    </ResponseField>
+    
+    <ResponseField name="normStd" type="Triple<number>">
+      Per-channel standard deviation values for input normalization.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### SemanticSegmentationModelSources
+
+Per-model config for `SemanticSegmentationModule.fromModelName`. Each model name maps to its required fields.
+
+```typescript
+type SemanticSegmentationModelSources =
+  | { modelName: 'deeplab-v3-resnet50'; modelSource: ResourceSource }
+  | { modelName: 'deeplab-v3-resnet101'; modelSource: ResourceSource }
+  | { modelName: 'deeplab-v3-mobilenet-v3-large'; modelSource: ResourceSource }
+  | { modelName: 'lraspp-mobilenet-v3-large'; modelSource: ResourceSource }
+  | { modelName: 'fcn-resnet50'; modelSource: ResourceSource }
+  | { modelName: 'fcn-resnet101'; modelSource: ResourceSource }
+  | { modelName: 'deeplab-v3-resnet50-quantized'; modelSource: ResourceSource }
+  | { modelName: 'deeplab-v3-resnet101-quantized'; modelSource: ResourceSource }
+  | { modelName: 'deeplab-v3-mobilenet-v3-large-quantized'; modelSource: ResourceSource }
+  | { modelName: 'lraspp-mobilenet-v3-large-quantized'; modelSource: ResourceSource }
+  | { modelName: 'fcn-resnet50-quantized'; modelSource: ResourceSource }
+  | { modelName: 'fcn-resnet101-quantized'; modelSource: ResourceSource }
+  | { modelName: 'selfie-segmentation'; modelSource: ResourceSource };
+```
+
+### SemanticSegmentationModelName
+
+Union of all built-in semantic segmentation model names.
+
+```typescript
+type SemanticSegmentationModelName = SemanticSegmentationModelSources['modelName'];
+```
+
+### DeeplabLabel
+
+Labels used in the DeepLab semantic segmentation model.
+
+```typescript
+enum DeeplabLabel {
+  BACKGROUND,
+  AEROPLANE,
+  BICYCLE,
+  BIRD,
+  BOAT,
+  BOTTLE,
+  BUS,
+  CAR,
+  CAT,
+  CHAIR,
+  COW,
+  DININGTABLE,
+  DOG,
+  HORSE,
+  MOTORBIKE,
+  PERSON,
+  POTTEDPLANT,
+  SHEEP,
+  SOFA,
+  TRAIN,
+  TVMONITOR,
+}
+```
+
+### SelfieSegmentationLabel
+
+Labels used in the selfie semantic segmentation model.
+
+```typescript
+enum SelfieSegmentationLabel {
+  SELFIE,
+  BACKGROUND,
+}
+```
+
+### SemanticSegmentationProps
+
+Props for the `useSemanticSegmentation` hook.
+
+<ResponseField name="model" type="C extends SemanticSegmentationModelSources" required>
+  The model config containing `modelName` and `modelSource`.
+</ResponseField>
+
+<ResponseField name="preventLoad" type="boolean">
+  Boolean that can prevent automatic model loading (and downloading the data if you load it for the first time) after running the hook.
+</ResponseField>
+
+### SemanticSegmentationType
+
+Return type for the `useSemanticSegmentation` hook. Manages the state and operations for semantic segmentation models.
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains the error object if the model failed to load, download, or encountered a runtime error during segmentation.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the segmentation model is loaded and ready to process images.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Represents the download progress of the model binary as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="forward" type="function">
+  Executes the model's forward pass to perform semantic segmentation on the provided image.
+  
+  **Parameters:**
+  - `imageSource` (string) - A string representing the image source (e.g., a file path, URI, or base64 string) to be processed.
+  - `classesOfInterest` (K[], optional) - An optional array of label keys indicating which per-class probability masks to include in the output. `ARGMAX` is always returned regardless.
+  - `resizeToInput` (boolean, optional) - Whether to resize the output masks to the original input image dimensions. If `false`, returns the raw model output dimensions. Defaults to `true`.
+  
+  **Returns:** A Promise resolving to an object with an `'ARGMAX'` `Int32Array` of per-pixel class indices, and each requested class label mapped to a `Float32Array` of per-pixel probabilities.
+  
+  **Throws:** `RnExecutorchError` if the model is not loaded or is currently processing another image.
+</ResponseField>

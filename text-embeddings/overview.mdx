@@ -1,0 +1,73 @@
+---
+title: Text Embeddings Overview
+description: Generate text embeddings for semantic search and similarity matching in React Native
+---
+
+Text embeddings convert text into numerical vector representations that capture semantic meaning. This enables powerful use cases like semantic search, similarity matching, and clustering.
+
+## What are Text Embeddings?
+
+Text embeddings are dense vector representations of text where semantically similar texts have similar vector representations. Unlike simple keyword matching, embeddings understand context and meaning:
+
+- "The weather is lovely today" and "It's so sunny outside!" have high similarity
+- "He drove to the stadium" has low similarity to weather-related sentences
+
+## Key Features
+
+- **On-device Processing**: Generate embeddings locally without network requests
+- **Real-time Performance**: Fast inference optimized for mobile devices
+- **Multiple Models**: Support for various embedding models including MiniLM and CLIP
+- **React Integration**: Easy-to-use hook API with loading states
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Semantic Search" icon="magnifying-glass">
+    Find relevant content based on meaning, not just keywords
+  </Card>
+  <Card title="Content Recommendation" icon="stars">
+    Recommend similar items based on embedding similarity
+  </Card>
+  <Card title="Duplicate Detection" icon="clone">
+    Identify duplicate or near-duplicate content
+  </Card>
+  <Card title="Content Clustering" icon="layer-group">
+    Group similar content together automatically
+  </Card>
+</CardGroup>
+
+## Supported Models
+
+### ALL_MINILM_L6_V2
+
+A compact and efficient sentence transformer model ideal for general-purpose text embeddings.
+
+- **Size**: Optimized for mobile deployment
+- **Use Case**: General semantic search and similarity tasks
+- **Output**: 384-dimensional embeddings
+
+### CLIP_VIT_BASE_PATCH32_TEXT
+
+Text encoder from the CLIP model, designed for multimodal image-text matching.
+
+- **Use Case**: Image-text matching, cross-modal retrieval
+- **Output**: 512-dimensional embeddings
+- **Compatible**: Works with CLIP image embeddings
+
+## How It Works
+
+1. **Load Model**: The hook downloads and loads the model and tokenizer
+2. **Generate Embeddings**: Call `forward()` with your text
+3. **Compare Vectors**: Use dot product or cosine similarity to compare embeddings
+4. **Find Matches**: Rank results by similarity score
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Usage Guide" icon="code" href="./usage">
+    Learn how to use the useTextEmbeddings hook
+  </Card>
+  <Card title="Semantic Search" icon="search" href="./semantic-search">
+    Build a semantic search feature
+  </Card>
+</CardGroup>

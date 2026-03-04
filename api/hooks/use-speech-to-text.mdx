@@ -1,0 +1,569 @@
+---
+title: 'useSpeechToText'
+description: 'React hook for speech recognition and transcription'
+icon: 'microphone'
+---
+
+## Overview
+
+The `useSpeechToText` hook manages a speech-to-text (STT) model instance for transcribing audio to text. It supports both one-shot transcription and streaming transcription modes.
+
+## Import
+
+```typescript
+import { useSpeechToText } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const stt = useSpeechToText({ model, preventLoad }: SpeechToTextProps): SpeechToTextType
+```
+
+## Parameters
+
+<ParamField path="model" type="SpeechToTextModelConfig" required>
+  Object containing model configuration
+  
+  <Expandable title="properties">
+    <ParamField path="isMultilingual" type="boolean" required>
+      Whether the model supports multiple languages (true for Whisper, false for Whisper.en)
+    </ParamField>
+    
+    <ParamField path="encoderSource" type="ResourceSource" required>
+      Source location of the encoder model binary (.pte)
+    </ParamField>
+    
+    <ParamField path="decoderSource" type="ResourceSource" required>
+      Source location of the decoder model binary (.pte)
+    </ParamField>
+    
+    <ParamField path="tokenizerSource" type="ResourceSource" required>
+      Source location of the tokenizer file
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading when the hook mounts
+</ParamField>
+
+## Return Value
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the STT model is loaded and ready for inference.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing audio.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="transcribe" type="function">
+  Transcribes audio waveform to text in a single pass.
+  
+  ```typescript
+  transcribe(
+    waveform: Float32Array,
+    options?: DecodingOptions
+  ): Promise<TranscriptionResult>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="waveform" type="Float32Array" required>
+      Input audio waveform sampled at 16kHz
+    </ParamField>
+    
+    <ParamField path="options" type="DecodingOptions">
+      Decoding options
+      
+      <Expandable title="properties">
+        <ParamField path="language" type="SpeechToTextLanguage">
+          Language code to guide transcription (e.g., 'en', 'es', 'fr')
+        </ParamField>
+        
+        <ParamField path="verbose" type="boolean">
+          If true, returns detailed result with timestamps and segments
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+  
+  Returns transcription result with text and optional detailed information.
+</ResponseField>
+
+<ResponseField name="stream" type="function">
+  Starts streaming transcription process.
+  
+  ```typescript
+  stream(options?: DecodingOptions): AsyncGenerator<{
+    committed: TranscriptionResult;
+    nonCommitted: TranscriptionResult;
+  }>
+  ```
+  
+  Use with `streamInsert` to feed audio chunks and `streamStop` to end.
+  
+  Returns async generator yielding committed and non-committed transcriptions.
+</ResponseField>
+
+<ResponseField name="streamInsert" type="function">
+  Inserts audio chunk into ongoing streaming transcription.
+  
+  ```typescript
+  streamInsert(waveform: Float32Array): void
+  ```
+</ResponseField>
+
+<ResponseField name="streamStop" type="function">
+  Stops the ongoing streaming transcription.
+  
+  ```typescript
+  streamStop(): void
+  ```
+</ResponseField>
+
+<ResponseField name="encode" type="function">
+  Runs encoder on audio waveform.
+  
+  ```typescript
+  encode(waveform: Float32Array): Promise<Float32Array>
+  ```
+</ResponseField>
+
+<ResponseField name="decode" type="function">
+  Runs decoder on encoded audio.
+  
+  ```typescript
+  decode(tokens: Int32Array, encoderOutput: Float32Array): Promise<Float32Array>
+  ```
+</ResponseField>
+
+## Types
+
+### TranscriptionResult
+
+```typescript
+interface TranscriptionResult {
+  task?: 'transcribe' | 'stream';
+  language: string;
+  duration: number;
+  text: string;
+  segments?: TranscriptionSegment[]; // Present if verbose=true
+}
+```
+
+### TranscriptionSegment
+
+```typescript
+interface TranscriptionSegment {
+  start: number;
+  end: number;
+  text: string;
+  words?: Word[];
+  tokens: number[];
+  temperature: number;
+  avgLogprob: number;
+  compressionRatio: number;
+}
+```
+
+## Usage Examples
+
+### Basic Transcription
+
+```typescript
+import { useSpeechToText } from 'react-native-executorch';
+import { useState } from 'react';
+import AudioRecorder from 'react-native-audio-recorder';
+
+function VoiceTranscriber() {
+  const [transcript, setTranscript] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  
+  const stt = useSpeechToText({
+    model: {
+      isMultilingual: false,
+      encoderSource: 'https://huggingface.co/.../encoder.pte',
+      decoderSource: 'https://huggingface.co/.../decoder.pte',
+      tokenizerSource: 'https://huggingface.co/.../tokenizer.json',
+    },
+  });
+  
+  const startRecording = async () => {
+    setIsRecording(true);
+    await AudioRecorder.start();
+  };
+  
+  const stopAndTranscribe = async () => {
+    setIsRecording(false);
+    const audioFile = await AudioRecorder.stop();
+    
+    // Convert audio to 16kHz Float32Array waveform
+    const waveform = await convertAudioToWaveform(audioFile);
+    
+    if (!stt.isReady) return;
+    
+    try {
+      const result = await stt.transcribe(waveform);
+      setTranscript(result.text);
+      console.log('Transcription:', result.text);
+    } catch (error) {
+      console.error('Transcription failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {stt.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <Button
+        title={isRecording ? 'Stop Recording' : 'Start Recording'}
+        onPress={isRecording ? stopAndTranscribe : startRecording}
+        disabled={!stt.isReady}
+      />
+      
+      {stt.isGenerating && <ActivityIndicator />}
+      
+      <Text>Transcript:</Text>
+      <Text>{transcript}</Text>
+    </View>
+  );
+}
+
+function convertAudioToWaveform(audioFile: string): Promise<Float32Array> {
+  // Implementation depends on your audio processing library
+  // Must return 16kHz mono Float32Array
+  return Promise.resolve(new Float32Array());
+}
+```
+
+### Multi-language Transcription
+
+```typescript
+import { useSpeechToText, SpeechToTextLanguage } from 'react-native-executorch';
+import { useState } from 'react';
+
+function MultiLanguageTranscriber() {
+  const [language, setLanguage] = useState<SpeechToTextLanguage>('en');
+  const [transcript, setTranscript] = useState('');
+  
+  const stt = useSpeechToText({
+    model: {
+      isMultilingual: true, // Whisper multilingual model
+      encoderSource: require('./models/encoder.pte'),
+      decoderSource: require('./models/decoder.pte'),
+      tokenizerSource: require('./models/tokenizer.json'),
+    },
+  });
+  
+  const transcribeWithLanguage = async (waveform: Float32Array) => {
+    if (!stt.isReady) return;
+    
+    try {
+      const result = await stt.transcribe(waveform, {
+        language: language,
+      });
+      
+      setTranscript(result.text);
+      console.log(`Transcribed in ${result.language}: ${result.text}`);
+    } catch (error) {
+      console.error('Transcription failed:', error);
+    }
+  };
+  
+  const languages: SpeechToTextLanguage[] = ['en', 'es', 'fr', 'de', 'zh', 'ja'];
+  
+  return (
+    <View>
+      <Text>Select Language:</Text>
+      <View style={{ flexDirection: 'row' }}>
+        {languages.map((lang) => (
+          <Button
+            key={lang}
+            title={lang.toUpperCase()}
+            onPress={() => setLanguage(lang)}
+            color={language === lang ? 'blue' : 'gray'}
+          />
+        ))}
+      </View>
+      
+      <Text>Selected: {language}</Text>
+      <Text>{transcript}</Text>
+    </View>
+  );
+}
+```
+
+### Verbose Transcription with Timestamps
+
+```typescript
+import { useSpeechToText } from 'react-native-executorch';
+import { useState } from 'react';
+
+function DetailedTranscriber() {
+  const [segments, setSegments] = useState<any[]>([]);
+  
+  const stt = useSpeechToText({
+    model: {
+      isMultilingual: false,
+      encoderSource: 'https://example.com/encoder.pte',
+      decoderSource: 'https://example.com/decoder.pte',
+      tokenizerSource: 'https://example.com/tokenizer.json',
+    },
+  });
+  
+  const transcribeVerbose = async (waveform: Float32Array) => {
+    if (!stt.isReady) return;
+    
+    try {
+      const result = await stt.transcribe(waveform, {
+        verbose: true,
+      });
+      
+      if (result.segments) {
+        setSegments(result.segments);
+        
+        result.segments.forEach((segment) => {
+          console.log(
+            `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]: ${segment.text}`
+          );
+        });
+      }
+    } catch (error) {
+      console.error('Transcription failed:', error);
+    }
+  };
+  
+  return (
+    <ScrollView>
+      <Text>Transcription Segments:</Text>
+      {segments.map((segment, idx) => (
+        <View key={idx} style={{ padding: 10, borderBottomWidth: 1 }}>
+          <Text style={{ fontWeight: 'bold' }}>{segment.text}</Text>
+          <Text style={{ color: 'gray' }}>
+            {segment.start.toFixed(2)}s - {segment.end.toFixed(2)}s
+          </Text>
+          <Text style={{ fontSize: 12 }}>
+            Confidence: {(-segment.avgLogprob).toFixed(2)}
+          </Text>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+```
+
+### Streaming Transcription
+
+```typescript
+import { useSpeechToText } from 'react-native-executorch';
+import { useState, useEffect } from 'react';
+import { NativeEventEmitter } from 'react-native';
+
+function StreamingTranscriber() {
+  const [committedText, setCommittedText] = useState('');
+  const [liveText, setLiveText] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  
+  const stt = useSpeechToText({
+    model: {
+      isMultilingual: false,
+      encoderSource: require('./models/encoder.pte'),
+      decoderSource: require('./models/decoder.pte'),
+      tokenizerSource: require('./models/tokenizer.json'),
+    },
+  });
+  
+  const startStreaming = async () => {
+    if (!stt.isReady) return;
+    
+    setIsStreaming(true);
+    setCommittedText('');
+    setLiveText('');
+    
+    try {
+      // Start the stream
+      const generator = stt.stream({ language: 'en' });
+      
+      // Process streaming results
+      for await (const result of generator) {
+        setCommittedText(result.committed.text);
+        setLiveText(result.nonCommitted.text);
+      }
+    } catch (error) {
+      console.error('Streaming failed:', error);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+  
+  // Feed audio chunks as they arrive
+  useEffect(() => {
+    if (!isStreaming) return;
+    
+    const audioEmitter = new NativeEventEmitter();
+    const subscription = audioEmitter.addListener('audioChunk', (chunk) => {
+      const waveform = new Float32Array(chunk.data);
+      stt.streamInsert(waveform);
+    });
+    
+    return () => subscription.remove();
+  }, [isStreaming]);
+  
+  const stopStreaming = () => {
+    stt.streamStop();
+    setIsStreaming(false);
+  };
+  
+  return (
+    <View>
+      <Button
+        title={isStreaming ? 'Stop' : 'Start Streaming'}
+        onPress={isStreaming ? stopStreaming : startStreaming}
+        disabled={!stt.isReady}
+      />
+      
+      <View style={{ padding: 10, backgroundColor: '#f0f0f0' }}>
+        <Text style={{ fontWeight: 'bold' }}>Committed:</Text>
+        <Text>{committedText}</Text>
+        
+        <Text style={{ fontWeight: 'bold', marginTop: 10, color: 'gray' }}>
+          Live (partial):
+        </Text>
+        <Text style={{ color: 'gray', fontStyle: 'italic' }}>
+          {liveText}
+        </Text>
+      </View>
+    </View>
+  );
+}
+```
+
+### Voice Notes App
+
+```typescript
+import { useSpeechToText } from 'react-native-executorch';
+import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+interface VoiceNote {
+  id: string;
+  timestamp: number;
+  transcript: string;
+  duration: number;
+}
+
+function VoiceNotesApp() {
+  const [notes, setNotes] = useState<VoiceNote[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  
+  const stt = useSpeechToText({
+    model: {
+      isMultilingual: false,
+      encoderSource: 'https://example.com/encoder.pte',
+      decoderSource: 'https://example.com/decoder.pte',
+      tokenizerSource: 'https://example.com/tokenizer.json',
+    },
+  });
+  
+  const recordAndSave = async () => {
+    // Record audio
+    setIsRecording(true);
+    const { waveform, duration } = await recordAudio();
+    setIsRecording(false);
+    
+    if (!stt.isReady) return;
+    
+    try {
+      const result = await stt.transcribe(waveform);
+      
+      const newNote: VoiceNote = {
+        id: `note_${Date.now()}`,
+        timestamp: Date.now(),
+        transcript: result.text,
+        duration: duration,
+      };
+      
+      const updatedNotes = [newNote, ...notes];
+      setNotes(updatedNotes);
+      
+      // Save to storage
+      await AsyncStorage.setItem('voiceNotes', JSON.stringify(updatedNotes));
+    } catch (error) {
+      console.error('Failed to save note:', error);
+    }
+  };
+  
+  const loadNotes = async () => {
+    const stored = await AsyncStorage.getItem('voiceNotes');
+    if (stored) {
+      setNotes(JSON.parse(stored));
+    }
+  };
+  
+  return (
+    <View>
+      <Button title="Load Notes" onPress={loadNotes} />
+      <Button
+        title={isRecording ? 'Recording...' : 'Record Note'}
+        onPress={recordAndSave}
+        disabled={!stt.isReady || isRecording}
+      />
+      
+      <ScrollView>
+        {notes.map((note) => (
+          <View key={note.id} style={{ padding: 10, borderBottomWidth: 1 }}>
+            <Text>{new Date(note.timestamp).toLocaleString()}</Text>
+            <Text>{note.transcript}</Text>
+            <Text style={{ color: 'gray' }}>
+              Duration: {note.duration.toFixed(1)}s
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function recordAudio(): Promise<{ waveform: Float32Array; duration: number }> {
+  // Implementation
+  return Promise.resolve({ waveform: new Float32Array(), duration: 0 });
+}
+```
+
+## Notes
+
+<Info>
+  Audio input must be 16kHz mono Float32Array for the model to process correctly.
+</Info>
+
+<Warning>
+  For streaming transcription, feed audio chunks regularly and call `streamStop` when done to finalize the transcription.
+</Warning>
+
+<Tip>
+  Use the `verbose` option to get detailed timestamps and segment information, useful for creating subtitles or analyzing speech patterns.
+</Tip>
+
+## Supported Languages
+
+Whisper multilingual model supports 90+ languages including:
+en, es, fr, de, it, pt, nl, pl, ru, zh, ja, ko, ar, hi, and many more.
+
+## See Also
+
+- [useTextToSpeech](/api/hooks/use-text-to-speech) - Text-to-speech synthesis
+- [useVAD](/api/hooks/use-vad) - Voice activity detection
+- [NLP Guide](/llm/speech-to-text) - Speech recognition guide

@@ -1,0 +1,430 @@
+---
+title: 'Error Codes'
+description: 'Complete reference of error codes in React Native ExecuTorch'
+---
+
+## RnExecutorchErrorCode
+
+Enum containing all error codes used throughout React Native ExecuTorch.
+
+## Application-Level Errors (100-199)
+
+### UnknownError (101)
+
+An umbrella-error that is thrown usually when something unexpected happens, for example a 3rd-party library error.
+
+```typescript
+RnExecutorchErrorCode.UnknownError = 101
+```
+
+### ModuleNotLoaded (102)
+
+Thrown when a user tries to run a model that is not yet downloaded or loaded into memory.
+
+```typescript
+RnExecutorchErrorCode.ModuleNotLoaded = 102
+```
+
+**Common Causes:**
+- Calling model methods before `isReady` is true
+- Model download or loading failed
+- Model was unloaded
+
+### FileWriteFailed (103)
+
+An error occurred when saving a file. This could be, for instance a result image from an image model.
+
+```typescript
+RnExecutorchErrorCode.FileWriteFailed = 103
+```
+
+### ModelGenerating (104)
+
+Thrown when a user tries to run a model that is currently processing. It is only allowed to run a single model prediction at a time.
+
+```typescript
+RnExecutorchErrorCode.ModelGenerating = 104
+```
+
+**Prevention:** Check `isGenerating` before starting new operations.
+
+### LanguageNotSupported (105)
+
+Thrown when a language is passed to a multi-language model that is not supported. For example OCR or Speech To Text.
+
+```typescript
+RnExecutorchErrorCode.LanguageNotSupported = 105
+```
+
+### InvalidConfig (112)
+
+Thrown when config parameters passed to a model are invalid. For example, when LLM's topp is outside of range [0, 1].
+
+```typescript
+RnExecutorchErrorCode.InvalidConfig = 112
+```
+
+### ThreadPoolError (113)
+
+Thrown when React Native ExecuTorch threadpool problem occurs.
+
+```typescript
+RnExecutorchErrorCode.ThreadPoolError = 113
+```
+
+### FileReadFailed (114)
+
+Thrown when a file read operation failed. This could be invalid image url passed to image models, or unsupported format.
+
+```typescript
+RnExecutorchErrorCode.FileReadFailed = 114
+```
+
+**Common Causes:**
+- Invalid file path or URI
+- Unsupported image format
+- Missing file permissions
+- File does not exist
+
+### InvalidModelOutput (115)
+
+Thrown when the size of model output is unexpected.
+
+```typescript
+RnExecutorchErrorCode.InvalidModelOutput = 115
+```
+
+### WrongDimensions (116)
+
+Thrown when the dimensions of input tensors don't match the model's expected dimensions.
+
+```typescript
+RnExecutorchErrorCode.WrongDimensions = 116
+```
+
+### InvalidUserInput (117)
+
+Thrown when the input passed to our APIs is invalid, for example when passing an empty message array to LLM's generate().
+
+```typescript
+RnExecutorchErrorCode.InvalidUserInput = 117
+```
+
+### DownloadInterrupted (118)
+
+Thrown when the number of downloaded files is unexpected, due to download interruptions.
+
+```typescript
+RnExecutorchErrorCode.DownloadInterrupted = 118
+```
+
+### PlatformNotSupported (119)
+
+Thrown when a feature or platform is not supported in the current environment.
+
+```typescript
+RnExecutorchErrorCode.PlatformNotSupported = 119
+```
+
+### TokenizerError (167)
+
+Thrown when an error occurs with the tokenizer or tokenization process.
+
+```typescript
+RnExecutorchErrorCode.TokenizerError = 167
+```
+
+### InvalidModelSource (255)
+
+Thrown when the type of model source passed by the user is invalid.
+
+```typescript
+RnExecutorchErrorCode.InvalidModelSource = 255
+```
+
+### UnexpectedNumInputs (97)
+
+Thrown when the number of passed inputs to the model is different than the model metadata specifies.
+
+```typescript
+RnExecutorchErrorCode.UnexpectedNumInputs = 97
+```
+
+## Speech-to-Text Errors (160-169)
+
+### MultilingualConfiguration (160)
+
+Thrown when there's a configuration mismatch between multilingual and language settings in Speech-to-Text models.
+
+```typescript
+RnExecutorchErrorCode.MultilingualConfiguration = 160
+```
+
+**Example:** Passing a language parameter to a non-multilingual model like Whisper.en
+
+### MissingDataChunk (161)
+
+Thrown when streaming transcription is attempted but audio data chunk is missing.
+
+```typescript
+RnExecutorchErrorCode.MissingDataChunk = 161
+```
+
+### StreamingNotStarted (162)
+
+Thrown when trying to stop or insert data into a stream that hasn't been started.
+
+```typescript
+RnExecutorchErrorCode.StreamingNotStarted = 162
+```
+
+### StreamingInProgress (163)
+
+Thrown when trying to start a new streaming session while another is already in progress.
+
+```typescript
+RnExecutorchErrorCode.StreamingInProgress = 163
+```
+
+## Resource Fetcher Errors (180-189)
+
+### ResourceFetcherDownloadFailed (180)
+
+Thrown when a resource fails to download. This could be due to invalid URL, or for example a network problem.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherDownloadFailed = 180
+```
+
+**Common Causes:**
+- Network connectivity issues
+- Invalid or unreachable URL
+- Server errors (404, 500, etc.)
+- Insufficient storage space
+
+### ResourceFetcherDownloadInProgress (181)
+
+Thrown when a user tries to trigger a download that's already in progress.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherDownloadInProgress = 181
+```
+
+### ResourceFetcherAlreadyPaused (182)
+
+Thrown when trying to pause a download that is already paused.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherAlreadyPaused = 182
+```
+
+### ResourceFetcherAlreadyOngoing (183)
+
+Thrown when trying to resume a download that is already ongoing.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherAlreadyOngoing = 183
+```
+
+### ResourceFetcherNotActive (184)
+
+Thrown when trying to pause, resume, or cancel a download that is not active.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherNotActive = 184
+```
+
+### ResourceFetcherMissingUri (185)
+
+Thrown when required URI information is missing for a download operation.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherMissingUri = 185
+```
+
+### ResourceFetcherAdapterNotInitialized (186)
+
+Thrown when trying to load resources without fetcher initialization.
+
+```typescript
+RnExecutorchErrorCode.ResourceFetcherAdapterNotInitialized = 186
+```
+
+## ExecuTorch Runtime Errors (0-50)
+
+These errors originate from the underlying ExecuTorch runtime.
+
+### Ok (0)
+
+Status indicating a successful operation.
+
+```typescript
+RnExecutorchErrorCode.Ok = 0
+```
+
+### Internal (1)
+
+An internal error occurred.
+
+```typescript
+RnExecutorchErrorCode.Internal = 1
+```
+
+### InvalidState (2)
+
+Status indicating the executor is in an invalid state for a targeted operation.
+
+```typescript
+RnExecutorchErrorCode.InvalidState = 2
+```
+
+### EndOfMethod (3)
+
+Status indicating there are no more steps of execution to run.
+
+```typescript
+RnExecutorchErrorCode.EndOfMethod = 3
+```
+
+### NotSupported (16)
+
+Operation is not supported in the current context.
+
+```typescript
+RnExecutorchErrorCode.NotSupported = 16
+```
+
+### NotImplemented (17)
+
+Operation is not yet implemented.
+
+```typescript
+RnExecutorchErrorCode.NotImplemented = 17
+```
+
+### InvalidArgument (18)
+
+User provided an invalid argument.
+
+```typescript
+RnExecutorchErrorCode.InvalidArgument = 18
+```
+
+### InvalidType (19)
+
+Object is an invalid type for the operation.
+
+```typescript
+RnExecutorchErrorCode.InvalidType = 19
+```
+
+### OperatorMissing (20)
+
+Operator(s) missing in the operator registry.
+
+```typescript
+RnExecutorchErrorCode.OperatorMissing = 20
+```
+
+### NotFound (32)
+
+Requested resource could not be found.
+
+```typescript
+RnExecutorchErrorCode.NotFound = 32
+```
+
+### MemoryAllocationFailed (33)
+
+Could not allocate the requested memory.
+
+```typescript
+RnExecutorchErrorCode.MemoryAllocationFailed = 33
+```
+
+### AccessFailed (34)
+
+Could not access a resource.
+
+```typescript
+RnExecutorchErrorCode.AccessFailed = 34
+```
+
+### InvalidProgram (35)
+
+Error caused by the contents of a program.
+
+```typescript
+RnExecutorchErrorCode.InvalidProgram = 35
+```
+
+### InvalidExternalData (36)
+
+Error caused by the contents of external data.
+
+```typescript
+RnExecutorchErrorCode.InvalidExternalData = 36
+```
+
+### OutOfResources (37)
+
+Does not have enough resources to perform the requested operation.
+
+```typescript
+RnExecutorchErrorCode.OutOfResources = 37
+```
+
+## Delegate Errors (48-50)
+
+### DelegateInvalidCompatibility (48)
+
+Init stage: Backend receives an incompatible delegate version.
+
+```typescript
+RnExecutorchErrorCode.DelegateInvalidCompatibility = 48
+```
+
+### DelegateMemoryAllocationFailed (49)
+
+Init stage: Backend fails to allocate memory.
+
+```typescript
+RnExecutorchErrorCode.DelegateMemoryAllocationFailed = 49
+```
+
+### DelegateInvalidHandle (50)
+
+Execute stage: The handle is invalid.
+
+```typescript
+RnExecutorchErrorCode.DelegateInvalidHandle = 50
+```
+
+## Error Code Ranges
+
+| Range | Category |
+|-------|----------|
+| 0-50 | ExecuTorch Runtime Errors |
+| 97-119 | Application-Level Errors |
+| 160-169 | Speech-to-Text Errors |
+| 167 | Tokenizer Errors |
+| 180-189 | Resource Fetcher Errors |
+| 255 | Model Source Errors |
+
+## Usage Example
+
+```typescript
+import { RnExecutorchErrorCode } from 'react-native-executorch';
+
+try {
+  await model.forward(input);
+} catch (error) {
+  if (error.code === RnExecutorchErrorCode.ModuleNotLoaded) {
+    console.log('Model not loaded yet');
+  } else if (error.code === RnExecutorchErrorCode.ModelGenerating) {
+    console.log('Model is busy');
+  } else if (error.code === RnExecutorchErrorCode.ResourceFetcherDownloadFailed) {
+    console.log('Download failed');
+  }
+}
+```

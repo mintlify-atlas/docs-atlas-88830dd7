@@ -1,0 +1,670 @@
+---
+title: Style Transfer
+description: Apply artistic styles to images in real-time
+---
+
+Style transfer applies the artistic style of one image to the content of another, enabling creative image transformations. React Native ExecuTorch provides pre-trained models for popular artistic styles that run in real-time on mobile devices.
+
+## Quick Start
+
+```tsx
+import { useStyleTransfer, STYLE_TRANSFER_CANDY } from 'react-native-executorch';
+
+function StyleTransferApp() {
+  const { isReady, forward } = useStyleTransfer({
+    model: STYLE_TRANSFER_CANDY,
+  });
+
+  const applyStyle = async (imageUri: string) => {
+    const styledImageUri = await forward(imageUri);
+    // Returns URI of styled image
+  };
+
+  return <Button title="Apply Style" onPress={() => applyStyle(imageUri)} />;
+}
+```
+
+## Hook API
+
+### `useStyleTransfer(props)`
+
+Manages a style transfer model instance.
+
+#### Parameters
+
+<ParamField path="model" type="object" required>
+  Model configuration object
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source of the style transfer model binary
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Error object if loading or inference fails
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Whether the model is loaded and ready
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Whether the model is currently processing
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress (0-1)
+</ResponseField>
+
+<ResponseField name="forward" type="(imageSource: string) => Promise<string>">
+  Apply artistic style to an image. Returns URI of the styled image (base64 or file path).
+</ResponseField>
+
+## Available Styles
+
+### STYLE_TRANSFER_CANDY
+
+Bright, colorful candy-like artistic style.
+
+```tsx
+import { STYLE_TRANSFER_CANDY } from 'react-native-executorch';
+
+const styler = useStyleTransfer({
+  model: STYLE_TRANSFER_CANDY,
+});
+```
+
+**Characteristics:**
+- Vibrant colors
+- Abstract patterns
+- Playful aesthetic
+- **Inference Time**: ~200-300ms
+
+### STYLE_TRANSFER_MOSAIC
+
+Stained glass mosaic pattern style.
+
+```tsx
+import { STYLE_TRANSFER_MOSAIC } from 'react-native-executorch';
+
+const styler = useStyleTransfer({
+  model: STYLE_TRANSFER_MOSAIC,
+});
+```
+
+**Characteristics:**
+- Geometric patterns
+- Bold color blocks
+- Stained glass effect
+- **Inference Time**: ~200-300ms
+
+### STYLE_TRANSFER_RAIN_PRINCESS
+
+Impressionist painting style inspired by Afremov's work.
+
+```tsx
+import { STYLE_TRANSFER_RAIN_PRINCESS } from 'react-native-executorch';
+
+const styler = useStyleTransfer({
+  model: STYLE_TRANSFER_RAIN_PRINCESS,
+});
+```
+
+**Characteristics:**
+- Soft, blended colors
+- Impressionist brushstrokes
+- Romantic atmosphere
+- **Inference Time**: ~200-300ms
+
+### STYLE_TRANSFER_UDNIE
+
+Cubist abstract art style.
+
+```tsx
+import { STYLE_TRANSFER_UDNIE } from 'react-native-executorch';
+
+const styler = useStyleTransfer({
+  model: STYLE_TRANSFER_UDNIE,
+});
+```
+
+**Characteristics:**
+- Abstract geometric forms
+- Cubist aesthetic
+- Fragmented shapes
+- **Inference Time**: ~200-300ms
+
+## Complete Example
+
+```tsx
+import React, { useState } from 'react';
+import { View, Image, StyleSheet, TouchableOpacity, Text, ScrollView } from 'react-native';
+import {
+  useStyleTransfer,
+  STYLE_TRANSFER_CANDY,
+  STYLE_TRANSFER_MOSAIC,
+  STYLE_TRANSFER_RAIN_PRINCESS,
+  STYLE_TRANSFER_UDNIE,
+} from 'react-native-executorch';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+type StyleModel = typeof STYLE_TRANSFER_CANDY;
+
+const STYLES = [
+  { name: 'Candy', model: STYLE_TRANSFER_CANDY },
+  { name: 'Mosaic', model: STYLE_TRANSFER_MOSAIC },
+  { name: 'Rain Princess', model: STYLE_TRANSFER_RAIN_PRINCESS },
+  { name: 'Udnie', model: STYLE_TRANSFER_UDNIE },
+];
+
+function StyleTransferDemo() {
+  const [originalUri, setOriginalUri] = useState<string | null>(null);
+  const [styledUri, setStyledUri] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState(0);
+
+  const { isReady, isGenerating, error, downloadProgress, forward } = useStyleTransfer({
+    model: STYLES[selectedStyle].model,
+  });
+
+  const selectAndStyleImage = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    
+    if (result.assets && result.assets[0].uri) {
+      const uri = result.assets[0].uri;
+      setOriginalUri(uri);
+      
+      try {
+        const styled = await forward(uri);
+        setStyledUri(styled);
+      } catch (err) {
+        console.error('Style transfer failed:', err);
+      }
+    }
+  };
+
+  const switchStyle = async (index: number) => {
+    setSelectedStyle(index);
+    setStyledUri(null); // Clear previous styled image
+  };
+
+  const reapplyStyle = async () => {
+    if (!originalUri) return;
+    
+    try {
+      const styled = await forward(originalUri);
+      setStyledUri(styled);
+    } catch (err) {
+      console.error('Style transfer failed:', err);
+    }
+  };
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>Error: {error.message}</Text>
+      </View>
+    );
+  }
+
+  if (!isReady) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading {STYLES[selectedStyle].name} style...</Text>
+        <Text>{(downloadProgress * 100).toFixed(0)}%</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Style Transfer</Text>
+      
+      {/* Style selection */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.styleSelector}>
+        {STYLES.map((style, index) => (
+          <TouchableOpacity
+            key={style.name}
+            style={[
+              styles.styleButton,
+              selectedStyle === index && styles.styleButtonActive,
+            ]}
+            onPress={() => switchStyle(index)}
+          >
+            <Text
+              style={[
+                styles.styleButtonText,
+                selectedStyle === index && styles.styleButtonTextActive,
+              ]}
+            >
+              {style.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Action buttons */}
+      <TouchableOpacity
+        style={styles.button}
+        onPress={selectAndStyleImage}
+        disabled={isGenerating}
+      >
+        <Text style={styles.buttonText}>
+          {isGenerating ? 'Applying Style...' : 'Select & Style Image'}
+        </Text>
+      </TouchableOpacity>
+
+      {originalUri && (
+        <TouchableOpacity
+          style={[styles.button, styles.secondaryButton]}
+          onPress={reapplyStyle}
+          disabled={isGenerating}
+        >
+          <Text style={[styles.buttonText, styles.secondaryButtonText]}>
+            Apply {STYLES[selectedStyle].name} Style
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Image comparison */}
+      {originalUri && (
+        <View style={styles.comparison}>
+          <View style={styles.imageSection}>
+            <Text style={styles.label}>Original</Text>
+            <Image source={{ uri: originalUri }} style={styles.image} />
+          </View>
+          
+          {styledUri && (
+            <View style={styles.imageSection}>
+              <Text style={styles.label}>Styled</Text>
+              <Image source={{ uri: styledUri }} style={styles.image} />
+            </View>
+          )}
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  styleSelector: {
+    marginBottom: 20,
+  },
+  styleButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginRight: 10,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+  },
+  styleButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  styleButtonText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  styleButtonTextActive: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  button: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  secondaryButton: {
+    backgroundColor: 'white',
+    borderWidth: 2,
+    borderColor: '#007AFF',
+  },
+  secondaryButtonText: {
+    color: '#007AFF',
+  },
+  comparison: {
+    marginTop: 20,
+  },
+  imageSection: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  image: {
+    width: '100%',
+    height: 300,
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  error: {
+    color: 'red',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+});
+
+export default StyleTransferDemo;
+```
+
+## Use Cases
+
+### Photo Enhancement App
+
+Create artistic photos:
+
+```tsx
+const enhancePhoto = async (photoUri: string, styleName: string) => {
+  const styleMap = {
+    candy: STYLE_TRANSFER_CANDY,
+    mosaic: STYLE_TRANSFER_MOSAIC,
+    impressionist: STYLE_TRANSFER_RAIN_PRINCESS,
+    cubist: STYLE_TRANSFER_UDNIE,
+  };
+  
+  const styler = useStyleTransfer({
+    model: styleMap[styleName as keyof typeof styleMap],
+  });
+  
+  const styledPhoto = await styler.forward(photoUri);
+  return styledPhoto;
+};
+```
+
+### Real-Time Camera Effects
+
+Apply styles to camera captures:
+
+```tsx
+import { Camera } from 'react-native-vision-camera';
+
+function ArtisticCamera() {
+  const [lastStyled, setLastStyled] = useState<string | null>(null);
+  const { forward, isReady } = useStyleTransfer({
+    model: STYLE_TRANSFER_CANDY,
+  });
+  
+  const captureAndStyle = async () => {
+    const photo = await camera.current.takePhoto();
+    const styled = await forward(photo.path);
+    setLastStyled(styled);
+  };
+  
+  return (
+    <>
+      <Camera ref={camera} />
+      <Button title="Capture" onPress={captureAndStyle} disabled={!isReady} />
+      {lastStyled && <Image source={{ uri: lastStyled }} />}
+    </>
+  );
+}
+```
+
+### Batch Processing
+
+Process multiple images:
+
+```tsx
+const batchStyleTransfer = async (
+  imageUris: string[],
+  style: StyleModel
+) => {
+  const styler = useStyleTransfer({ model: style });
+  const styledImages: string[] = [];
+  
+  for (const uri of imageUris) {
+    try {
+      const styled = await styler.forward(uri);
+      styledImages.push(styled);
+    } catch (error) {
+      console.error(`Failed to style ${uri}:`, error);
+      styledImages.push(uri); // Keep original on error
+    }
+  }
+  
+  return styledImages;
+};
+```
+
+### Social Media Filters
+
+Create shareable artistic content:
+
+```tsx
+const createSharableArt = async (imageUri: string) => {
+  const styled = await forward(imageUri);
+  
+  // Add watermark or branding
+  const withBranding = await addWatermark(styled, 'Styled by MyApp');
+  
+  // Share
+  await Share.share({
+    url: withBranding,
+    message: 'Check out my artistic photo!',
+  });
+};
+```
+
+## Style Comparison
+
+Compare multiple styles:
+
+```tsx
+import { STYLE_TRANSFER_CANDY, STYLE_TRANSFER_MOSAIC } from 'react-native-executorch';
+
+function StyleComparison({ imageUri }: { imageUri: string }) {
+  const candy = useStyleTransfer({ model: STYLE_TRANSFER_CANDY });
+  const mosaic = useStyleTransfer({ model: STYLE_TRANSFER_MOSAIC });
+  
+  const [styledImages, setStyledImages] = useState<Record<string, string>>({});
+  
+  const compareStyles = async () => {
+    const [candyResult, mosaicResult] = await Promise.all([
+      candy.forward(imageUri),
+      mosaic.forward(imageUri),
+    ]);
+    
+    setStyledImages({
+      candy: candyResult,
+      mosaic: mosaicResult,
+    });
+  };
+  
+  return (
+    <View>
+      <Button title="Compare Styles" onPress={compareStyles} />
+      <View style={{ flexDirection: 'row' }}>
+        {styledImages.candy && <Image source={{ uri: styledImages.candy }} />}
+        {styledImages.mosaic && <Image source={{ uri: styledImages.mosaic }} />}
+      </View>
+    </View>
+  );
+}
+```
+
+## Performance Tips
+
+### Image Size
+
+Resize large images for faster processing:
+
+```tsx
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+
+const optimizeForStyleTransfer = async (imageUri: string) => {
+  const optimized = await manipulateAsync(
+    imageUri,
+    [{ resize: { width: 512 } }], // Resize to 512px width
+    { compress: 0.8, format: SaveFormat.JPEG }
+  );
+  
+  return optimized.uri;
+};
+
+const applyStyleEfficiently = async (imageUri: string) => {
+  const optimized = await optimizeForStyleTransfer(imageUri);
+  const styled = await forward(optimized);
+  return styled;
+};
+```
+
+### Model Selection
+
+All style transfer models have similar performance characteristics:
+
+- **Platform-optimized**: CoreML on iOS, XNNPACK on Android
+- **Inference time**: ~200-300ms for 512x512 images
+- **Memory**: ~50-100MB per model
+
+### Caching Results
+
+Cache styled images to avoid reprocessing:
+
+```tsx
+const cachedStyleTransfer = async (
+  imageUri: string,
+  styleName: string
+) => {
+  const cacheKey = `${imageUri}_${styleName}`;
+  
+  // Check cache first
+  const cached = await AsyncStorage.getItem(cacheKey);
+  if (cached) return cached;
+  
+  // Apply style
+  const styled = await forward(imageUri);
+  
+  // Save to cache
+  await AsyncStorage.setItem(cacheKey, styled);
+  
+  return styled;
+};
+```
+
+### Progressive Enhancement
+
+Show preview while processing:
+
+```tsx
+function ProgressiveStyleTransfer({ imageUri }: { imageUri: string }) {
+  const [styledUri, setStyledUri] = useState<string | null>(null);
+  const { forward, isGenerating } = useStyleTransfer({
+    model: STYLE_TRANSFER_CANDY,
+  });
+  
+  useEffect(() => {
+    forward(imageUri).then(setStyledUri);
+  }, [imageUri]);
+  
+  return (
+    <View>
+      {/* Show original while processing */}
+      <Image source={{ uri: imageUri }} style={styles.image} />
+      
+      {/* Overlay styled image when ready */}
+      {styledUri && (
+        <Image
+          source={{ uri: styledUri }}
+          style={[styles.image, StyleSheet.absoluteFill]}
+        />
+      )}
+      
+      {isGenerating && <ActivityIndicator style={styles.loader} />}
+    </View>
+  );
+}
+```
+
+## Custom Styles
+
+Train and use custom style transfer models:
+
+```tsx
+const customStyler = useStyleTransfer({
+  model: {
+    modelSource: 'https://my-server.com/custom-style.pte',
+  },
+});
+```
+
+<Note>
+Custom models must be trained using the Fast Neural Style Transfer architecture and exported to ExecuTorch `.pte` format. See the [Custom Models](/advanced/custom-models) guide for training instructions.
+</Note>
+
+## Output Format
+
+The `forward` function returns styled images as:
+
+- **Base64 URI**: `data:image/jpeg;base64,...`
+- **File URI**: `file:///path/to/styled-image.jpg`
+
+You can use these URIs directly with React Native's `Image` component or save them to the photo library.
+
+## Saving Styled Images
+
+```tsx
+import * as MediaLibrary from 'expo-media-library';
+
+const saveStyledImage = async (styledUri: string) => {
+  // Request permissions
+  const { status } = await MediaLibrary.requestPermissionsAsync();
+  if (status !== 'granted') {
+    alert('Permission required');
+    return;
+  }
+  
+  // Save to photo library
+  await MediaLibrary.saveToLibraryAsync(styledUri);
+  alert('Styled image saved!');
+};
+```
+
+## Type Reference
+
+```typescript
+import { ResourceSource } from 'react-native-executorch';
+
+interface StyleTransferProps {
+  model: { modelSource: ResourceSource };
+  preventLoad?: boolean;
+}
+
+interface StyleTransferType {
+  error: RnExecutorchError | null;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  forward: (imageSource: string) => Promise<string>;
+}
+```
+
+## Related
+
+- [Image Embeddings](/computer-vision/image-embeddings) - Feature extraction
+- [Semantic Segmentation](/computer-vision/semantic-segmentation) - Pixel classification
+- [Custom Models](/advanced/custom-models) - Train custom styles

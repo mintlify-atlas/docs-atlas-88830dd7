@@ -1,0 +1,137 @@
+---
+title: 'LLM Defaults'
+description: 'Default configuration constants for Large Language Models'
+---
+
+## DEFAULT_SYSTEM_PROMPT
+
+Default system prompt used to guide the behavior of Large Language Models (LLMs).
+
+```typescript
+export const DEFAULT_SYSTEM_PROMPT =
+  "You are a knowledgeable, efficient, and direct AI assistant. Provide concise answers, focusing on the key information needed. Offer suggestions tactfully when appropriate to improve outcomes. Engage in productive collaboration with the user. Don't return too much text.";
+```
+
+This prompt is designed to:
+- Encourage concise, focused responses
+- Promote helpful and tactful suggestions
+- Foster productive collaboration
+- Limit verbose outputs
+
+## DEFAULT_STRUCTURED_OUTPUT_PROMPT
+
+Generates a default structured output prompt based on the provided JSON schema.
+
+```typescript
+export const DEFAULT_STRUCTURED_OUTPUT_PROMPT = (
+  structuredOutputSchema: string
+) => string;
+```
+
+### Parameters
+
+- `structuredOutputSchema` (string) - A string representing the JSON schema for the desired output format.
+
+### Returns
+
+A prompt string instructing the model to format its output according to the given schema.
+
+### Example
+
+```typescript
+const schema = JSON.stringify({
+  properties: {
+    foo: {
+      title: "Foo",
+      description: "a list of strings",
+      type: "array",
+      items: { type: "string" }
+    }
+  },
+  required: ["foo"]
+});
+
+const prompt = DEFAULT_STRUCTURED_OUTPUT_PROMPT(schema);
+```
+
+The generated prompt will instruct the model to return valid JSON instances that conform to the provided schema.
+
+## DEFAULT_MESSAGE_HISTORY
+
+Default message history for Large Language Models (LLMs).
+
+```typescript
+export const DEFAULT_MESSAGE_HISTORY: Message[] = [];
+```
+
+Initialized as an empty array. Use this as the starting point for conversation history when no initial messages are provided.
+
+## DEFAULT_CONTEXT_BUFFER_TOKENS
+
+Default context buffer tokens (number of tokens to keep for the model response) for Large Language Models (LLMs).
+
+```typescript
+export const DEFAULT_CONTEXT_BUFFER_TOKENS = 512;
+```
+
+This value represents:
+- The number of tokens reserved for model generation
+- Buffer space to prevent context overflow
+- Default allocation when not explicitly configured
+
+## DEFAULT_CHAT_CONFIG
+
+Default chat configuration for Large Language Models (LLMs).
+
+```typescript
+export const DEFAULT_CHAT_CONFIG: ChatConfig = {
+  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  initialMessageHistory: DEFAULT_MESSAGE_HISTORY,
+  contextStrategy: new SlidingWindowContextStrategy(
+    DEFAULT_CONTEXT_BUFFER_TOKENS
+  ),
+};
+```
+
+### Properties
+
+- **systemPrompt** - Uses `DEFAULT_SYSTEM_PROMPT`
+- **initialMessageHistory** - Empty array from `DEFAULT_MESSAGE_HISTORY`
+- **contextStrategy** - Sliding window strategy with 512 token buffer
+
+### Usage
+
+This configuration provides sensible defaults for chat applications:
+
+```typescript
+import { DEFAULT_CHAT_CONFIG } from 'react-native-executorch';
+
+const llm = useLLM({
+  model: LLAMA3_2_1B,
+});
+
+llm.configure({
+  chatConfig: DEFAULT_CHAT_CONFIG,
+});
+```
+
+You can also override specific properties:
+
+```typescript
+llm.configure({
+  chatConfig: {
+    ...DEFAULT_CHAT_CONFIG,
+    systemPrompt: "You are a helpful translator.",
+  },
+});
+```
+
+## Context Strategy
+
+The default configuration uses a **Sliding Window Context Strategy** which:
+- Maintains recent conversation history within token limits
+- Automatically truncates older messages when context is full
+- Reserves buffer space for model responses
+- Ensures system prompt is always included
+
+For custom context management, you can implement the `ContextStrategy` interface with your own `buildContext` method.

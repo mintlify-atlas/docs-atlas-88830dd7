@@ -1,97 +1,324 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "React Native ExecuTorch"
+description: "Run AI models on-device with React Native, powered by ExecuTorch"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative bg-gradient-to-br from-[#0a0c23] via-[#12142b] to-[#0a0c23] dark:bg-gradient-to-br dark:from-[#0a0c23] dark:via-[#12142b] dark:to-[#0a0c23] py-20 overflow-hidden">
+  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMzLjMxNCAwIDYgMi42ODYgNiA2cy0yLjY4NiA2LTYgNi02LTIuNjg2LTYtNiAyLjY4Ni02IDYtNnoiIHN0cm9rZT0iIzA4MTg3NSIgc3Ryb2tlLW9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-30"></div>
+  
+  <div className="max-w-6xl mx-auto px-6 lg:px-8 relative z-10">
+    <div className="grid lg:grid-cols-12 gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white dark:text-white mb-6">
+          On-device AI for React Native
+        </h1>
+        <p className="text-lg sm:text-xl text-gray-300 dark:text-gray-300 max-w-2xl mb-8">
+          Run LLMs, computer vision, and speech models directly on mobile devices with a declarative React Native API, powered by ExecuTorch.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-[#f9c38c] hover:bg-[#f4a663] text-black dark:bg-[#f9c38c] dark:hover:bg-[#f4a663] dark:text-black font-semibold transition-colors no-underline"
+          >
+            Get Started
+            <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+          <a 
+            href="/api/hooks/use-llm" 
+            className="inline-flex items-center px-6 py-3 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 dark:border-white/30 dark:bg-white/10 dark:hover:bg-white/20 text-white dark:text-white font-semibold transition-colors no-underline"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+      <div className="lg:col-span-5 hidden lg:block">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#081875] to-[#7a8eb5] dark:from-[#081875] dark:to-[#7a8eb5] rounded-2xl blur-3xl opacity-30"></div>
+          <div className="relative bg-[#1a1c36]/50 dark:bg-[#1a1c36]/50 backdrop-blur-sm border border-white/10 dark:border-white/10 rounded-2xl p-6">
+            <div className="text-sm font-mono">
+              <div className="text-[#7a8eb5] dark:text-[#7a8eb5]">// Run Llama 3.2 on device</div>
+              <div className="text-white dark:text-white mt-2">
+                <span className="text-[#f4a663]">const</span> llm = <span className="text-[#f4a663]">useLLM</span>({"{"}
+              </div>
+              <div className="text-white dark:text-white ml-4">
+                model: <span className="text-[#7a8eb5]">LLAMA3_2_1B</span>
+              </div>
+              <div className="text-white dark:text-white">{"});"}</div>
+              <div className="text-white dark:text-white mt-4">
+                <span className="text-[#f4a663]">await</span> llm.<span className="text-[#f4a663]">generate</span>(chat);
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+    Quick start
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get running in minutes with our step-by-step guide
+  </p>
+  
+  <Steps>
+    <Step title="Install the package">
+      Add React Native ExecuTorch to your project with your preferred package manager.
+      
+      <CodeGroup>
+      ```bash npm
+      npm install react-native-executorch
+      ```
+      ```bash yarn
+      yarn add react-native-executorch
+      ```
+      ```bash pnpm
+      pnpm add react-native-executorch
+      ```
+      </CodeGroup>
+    </Step>
+    
+    <Step title="Add resource fetcher">
+      Install the appropriate resource fetcher for your setup (Expo or bare React Native).
+      
+      <Tabs>
+        <Tab title="Expo">
+          ```bash
+          yarn add @react-native-executorch/expo-resource-fetcher
+          yarn add expo-file-system expo-asset
+          ```
+        </Tab>
+        <Tab title="Bare React Native">
+          ```bash
+          yarn add @react-native-executorch/bare-resource-fetcher
+          yarn add @dr.pogodin/react-native-fs @kesha-antonov/react-native-background-downloader
+          ```
+        </Tab>
+      </Tabs>
+    </Step>
+    
+    <Step title="Initialize and use">
+      Import the library, initialize with your resource fetcher, and start using AI models.
+      
+      ```tsx
+      import {
+        useLLM,
+        LLAMA3_2_1B,
+        initExecutorch,
+      } from 'react-native-executorch';
+      import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+      initExecutorch({
+        resourceFetcher: ExpoResourceFetcher,
+      });
 
-## Make it yours
+      function MyComponent() {
+        const llm = useLLM({ model: LLAMA3_2_1B });
+        
+        const handleGenerate = async () => {
+          const chat = [
+            { role: 'system', content: 'You are a helpful assistant' },
+            { role: 'user', content: 'What is the meaning of life?' }
+          ];
+          await llm.generate(chat);
+          console.log('Response:', llm.response);
+        };
+        
+        return (
+          <Button onPress={handleGenerate} disabled={!llm.isReady}>
+            Generate
+          </Button>
+        );
+      }
+      ```
+    </Step>
+  </Steps>
+</div>
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+    Explore capabilities
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Choose the AI capability that fits your use case
+  </p>
+  
+  <CardGroup cols={2}>
     <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+      title="Large Language Models"
+      icon="message-bot"
+      href="/llm/overview"
+    >
+      Run Llama and Qwen models on-device with tool calling, chat history, and context strategies
+    </Card>
+    <Card
+      title="Computer Vision"
+      icon="camera"
+      href="/computer-vision/overview"
+    >
+      Image classification, object detection, segmentation, OCR, style transfer, and embeddings
+    </Card>
+    <Card
+      title="Speech Processing"
+      icon="microphone"
+      href="/speech/overview"
+    >
+      Speech-to-text, text-to-speech, and voice activity detection for audio applications
+    </Card>
+    <Card
+      title="Text Embeddings"
+      icon="vector-square"
+      href="/text-embeddings/overview"
+    >
+      Generate semantic embeddings for search, similarity, and recommendations
+    </Card>
+  </CardGroup>
+</div>
 
-## Create beautiful pages
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+    Key features
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Everything you need to build on-device AI applications
+  </p>
+  
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="bg-gray-50 dark:bg-[#1a1c36] border border-gray-200 dark:border-transparent rounded-lg p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 w-10 h-10 bg-[#081875]/10 dark:bg-[#081875]/20 rounded-lg flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#081875] dark:text-[#7a8eb5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+            Declarative React API
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Use familiar React hooks to integrate AI models without native code expertise
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <div className="bg-gray-50 dark:bg-[#1a1c36] border border-gray-200 dark:border-transparent rounded-lg p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 w-10 h-10 bg-[#081875]/10 dark:bg-[#081875]/20 rounded-lg flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#081875] dark:text-[#7a8eb5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+            100% On-device
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            All inference runs locally on iOS and Android devices for privacy and offline use
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <div className="bg-gray-50 dark:bg-[#1a1c36] border border-gray-200 dark:border-transparent rounded-lg p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 w-10 h-10 bg-[#081875]/10 dark:bg-[#081875]/20 rounded-lg flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#081875] dark:text-[#7a8eb5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+            Ready-made models
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Pre-optimized models from HuggingFace ready to use with simple constants
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <div className="bg-gray-50 dark:bg-[#1a1c36] border border-gray-200 dark:border-transparent rounded-lg p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 w-10 h-10 bg-[#081875]/10 dark:bg-[#081875]/20 rounded-lg flex items-center justify-center">
+          <svg className="w-5 h-5 text-[#081875] dark:text-[#7a8eb5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+            Optimized loading
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Automatic model downloading, caching, and progress tracking built-in
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Everything you need to create world-class documentation.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-3">
+    Resources & community
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get help and connect with other developers
+  </p>
+  
+  <CardGroup cols={2}>
+    <Card
+      title="GitHub Repository"
+      icon="github"
+      href="https://github.com/software-mansion/react-native-executorch"
+    >
+      View source code, report issues, and contribute to the project
+    </Card>
+    <Card
+      title="Discord Community"
+      icon="discord"
+      href="https://discord.gg/ZGqqY55qkP"
+    >
+      Join our Discord server to ask questions and share your projects
+    </Card>
+    <Card
+      title="HuggingFace Models"
+      icon="cube"
+      href="https://huggingface.co/software-mansion"
+    >
+      Browse our collection of optimized models ready for on-device use
+    </Card>
+    <Card
+      title="Private Mind App"
+      icon="mobile"
+      href="https://privatemind.swmansion.com/"
+    >
+      See React Native ExecuTorch in action in a production privacy-first AI app
+    </Card>
+  </CardGroup>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="bg-gradient-to-br from-[#081875] to-[#12142b] dark:from-[#081875] dark:to-[#12142b] rounded-2xl p-8 md:p-12 text-center">
+    <h2 className="text-2xl sm:text-3xl font-bold text-white dark:text-white mb-4">
+      Ready to build with on-device AI?
+    </h2>
+    <p className="text-lg text-gray-200 dark:text-gray-200 max-w-2xl mx-auto mb-8">
+      Start building privacy-first mobile AI applications with React Native ExecuTorch today.
+    </p>
+    <a 
+      href="/installation" 
+      className="inline-flex items-center px-6 py-3 rounded-lg bg-[#f9c38c] hover:bg-[#f4a663] text-black dark:bg-[#f9c38c] dark:hover:bg-[#f4a663] dark:text-black font-semibold transition-colors no-underline"
+    >
+      Get Started Now
+      <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+      </svg>
+    </a>
+  </div>
+</div>

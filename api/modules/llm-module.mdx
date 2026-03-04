@@ -1,0 +1,384 @@
+---
+title: 'LLMModule'
+description: 'Class-based API for managing Large Language Model instances'
+icon: 'message-bot'
+---
+
+## Overview
+
+`LLMModule` provides a class-based interface for managing Large Language Model instances. It handles model loading, message management, text generation, and conversation context.
+
+## When to Use
+
+**Use `LLMModule` when:**
+- You need fine-grained control over the model lifecycle
+- You're working outside React components
+- You need to manage multiple model instances programmatically
+- You want to integrate LLM capabilities into non-React code
+
+**Use `useLLM` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Constructor
+
+```typescript
+new LLMModule({
+  tokenCallback?: (token: string) => void;
+  messageHistoryCallback?: (messageHistory: Message[]) => void;
+})
+```
+
+Creates a new LLM module instance with optional callbacks.
+
+### Parameters
+
+<ParamField path="tokenCallback" type="(token: string) => void" optional>
+  Optional function called on every generated token with that token as its argument.
+</ParamField>
+
+<ParamField path="messageHistoryCallback" type="(messageHistory: Message[]) => void" optional>
+  Optional function called on every finished message, returning the entire message history.
+</ParamField>
+
+### Example
+
+```typescript
+import { LLMModule } from 'react-native-executorch';
+
+const llm = new LLMModule({
+  tokenCallback: (token) => {
+    console.log('New token:', token);
+  },
+  messageHistoryCallback: (history) => {
+    console.log('Updated history:', history);
+  }
+});
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  model: {
+    modelSource: ResourceSource;
+    tokenizerSource: ResourceSource;
+    tokenizerConfigSource: ResourceSource;
+  },
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the LLM model and tokenizer.
+
+#### Parameters
+
+<ParamField path="model.modelSource" type="ResourceSource" required>
+  Resource location of the model binary.
+</ParamField>
+
+<ParamField path="model.tokenizerSource" type="ResourceSource" required>
+  Resource pointing to the tokenizer JSON file.
+</ParamField>
+
+<ParamField path="model.tokenizerConfigSource" type="ResourceSource" required>
+  Resource pointing to the tokenizer config JSON file.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to track download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await llm.load({
+  modelSource: 'https://example.com/model.pte',
+  tokenizerSource: 'https://example.com/tokenizer.json',
+  tokenizerConfigSource: 'https://example.com/tokenizer_config.json'
+}, (progress) => {
+  console.log(`Download progress: ${(progress * 100).toFixed(1)}%`);
+});
+```
+
+### configure()
+
+```typescript
+configure(config: LLMConfig): void
+```
+
+Configures chat, tool calling, and generation settings.
+
+#### Parameters
+
+<ParamField path="config" type="LLMConfig" required>
+  Configuration object containing `chatConfig`, `toolsConfig`, and `generationConfig`.
+</ParamField>
+
+#### Example
+
+```typescript
+llm.configure({
+  chatConfig: {
+    systemPrompt: 'You are a helpful assistant.'
+  },
+  generationConfig: {
+    temperature: 0.7,
+    topP: 0.9,
+    maxTokens: 512
+  }
+});
+```
+
+### forward()
+
+```typescript
+async forward(input: string): Promise<string>
+```
+
+Runs model inference with raw input string. You need to provide the entire conversation and prompt (in correct format with special tokens). This method doesn't manage conversation context.
+
+#### Parameters
+
+<ParamField path="input" type="string" required>
+  Raw input string containing the prompt and conversation history.
+</ParamField>
+
+#### Returns
+
+The generated response as a string.
+
+#### Example
+
+```typescript
+const response = await llm.forward('<|begin_of_text|>Hello, how are you?<|eot_id|>');
+console.log(response);
+```
+
+### generate()
+
+```typescript
+async generate(messages: Message[], tools?: LLMTool[]): Promise<string>
+```
+
+Runs the model to complete the chat passed in the `messages` argument. It doesn't manage conversation context.
+
+#### Parameters
+
+<ParamField path="messages" type="Message[]" required>
+  Array of messages representing the chat history.
+</ParamField>
+
+<ParamField path="tools" type="LLMTool[]" optional>
+  Optional array of tools that can be used during generation.
+</ParamField>
+
+#### Returns
+
+The generated response as a string.
+
+#### Example
+
+```typescript
+const response = await llm.generate([
+  { role: 'user', content: 'What is the capital of France?' }
+]);
+console.log(response); // "The capital of France is Paris."
+```
+
+### sendMessage()
+
+```typescript
+async sendMessage(message: string): Promise<Message[]>
+```
+
+Adds a user message to the conversation. After the model responds, it calls `messageHistoryCallback()` with both the user message and model response.
+
+#### Parameters
+
+<ParamField path="message" type="string" required>
+  The message string to send.
+</ParamField>
+
+#### Returns
+
+Updated message history including the new user message and model response.
+
+#### Example
+
+```typescript
+const history = await llm.sendMessage('Tell me a joke');
+console.log(history);
+// [
+//   { role: 'user', content: 'Tell me a joke' },
+//   { role: 'assistant', content: 'Why did the chicken cross...' }
+// ]
+```
+
+### deleteMessage()
+
+```typescript
+deleteMessage(index: number): Message[]
+```
+
+Deletes all messages starting with the message at the specified index position. After deletion, it calls `messageHistoryCallback()` with the new history.
+
+#### Parameters
+
+<ParamField path="index" type="number" required>
+  The index of the message to delete from history.
+</ParamField>
+
+#### Returns
+
+Updated message history after deletion.
+
+#### Example
+
+```typescript
+const newHistory = llm.deleteMessage(2);
+console.log(newHistory); // History with messages from index 2 onwards removed
+```
+
+### interrupt()
+
+```typescript
+interrupt(): void
+```
+
+Interrupts model generation. May return one more token after interruption.
+
+#### Example
+
+```typescript
+llm.interrupt();
+```
+
+### setTokenCallback()
+
+```typescript
+setTokenCallback({ tokenCallback }: { tokenCallback: (token: string) => void }): void
+```
+
+Sets a new token callback invoked on every token batch.
+
+#### Parameters
+
+<ParamField path="tokenCallback" type="(token: string) => void" required>
+  Callback function to handle new tokens.
+</ParamField>
+
+#### Example
+
+```typescript
+llm.setTokenCallback({
+  tokenCallback: (token) => console.log('Token:', token)
+});
+```
+
+### getGeneratedTokenCount()
+
+```typescript
+getGeneratedTokenCount(): number
+```
+
+Returns the number of tokens generated in the last response.
+
+#### Returns
+
+The count of generated tokens.
+
+### getPromptTokensCount()
+
+```typescript
+getPromptTokensCount(): number
+```
+
+Returns the number of prompt tokens in the last message.
+
+#### Returns
+
+The count of prompt tokens.
+
+### getTotalTokensCount()
+
+```typescript
+getTotalTokensCount(): number
+```
+
+Returns the total number of tokens from the previous generation (sum of prompt and generated tokens).
+
+#### Returns
+
+The count of prompt and generated tokens.
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Deletes the model from memory. You cannot delete the model while it's generating - you need to interrupt it first.
+
+#### Example
+
+```typescript
+llm.interrupt();
+// Wait for generation to stop
+llm.delete();
+```
+
+## Complete Example
+
+```typescript
+import { LLMModule } from 'react-native-executorch';
+
+// Create instance
+const llm = new LLMModule({
+  tokenCallback: (token) => {
+    process.stdout.write(token);
+  },
+  messageHistoryCallback: (history) => {
+    console.log('\nConversation updated:', history.length, 'messages');
+  }
+});
+
+// Load model
+await llm.load({
+  modelSource: 'https://example.com/llama-3.2-1B.pte',
+  tokenizerSource: 'https://example.com/tokenizer.json',
+  tokenizerConfigSource: 'https://example.com/tokenizer_config.json'
+}, (progress) => {
+  console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+});
+
+// Configure
+llm.configure({
+  chatConfig: {
+    systemPrompt: 'You are a helpful coding assistant.'
+  },
+  generationConfig: {
+    temperature: 0.7,
+    maxTokens: 256
+  }
+});
+
+// Send messages
+const history = await llm.sendMessage('Explain React hooks');
+
+// Check token usage
+console.log('Tokens used:', llm.getTotalTokensCount());
+
+// Clean up
+llm.delete();
+```
+
+## See Also
+
+- [useLLM Hook](/api/hooks/use-llm) - React hook alternative
+- [Message Types](/api/types/message)
+- [LLMConfig Types](/api/types/llm-config)

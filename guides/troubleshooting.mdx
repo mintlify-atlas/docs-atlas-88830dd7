@@ -1,0 +1,735 @@
+---
+title: Troubleshooting Guide
+description: Solutions to common issues when using React Native ExecuTorch
+---
+
+This guide provides solutions to common issues you may encounter when using React Native ExecuTorch.
+
+## Installation Issues
+
+### Resource Fetcher Not Initialized
+
+**Error Message**: `ResourceFetcherAdapterNotInitialized (Code 186)`
+
+**Cause**: The resource fetcher was not initialized before using model hooks.
+
+**Solution**:
+
+For Expo projects:
+```typescript
+import { initExecutorch } from 'react-native-executorch';
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// Call this before using any hooks, typically in App.tsx or _layout.tsx
+initExecutorch({
+  resourceFetcher: ExpoResourceFetcher,
+});
+```
+
+For bare React Native projects:
+```typescript
+import { initExecutorch } from 'react-native-executorch';
+import { BareResourceFetcher } from '@react-native-executorch/bare-resource-fetcher';
+
+initExecutorch({
+  resourceFetcher: BareResourceFetcher,
+});
+```
+
+### Native Module Not Found
+
+**Error Message**: `Module not found` or `NativeModule.RNExecutorch is null`
+
+**Solution for iOS**:
+
+```bash
+cd ios
+rm -rf Pods Podfile.lock
+pod install
+cd ..
+npx react-native run-ios
+```
+
+**Solution for Android**:
+
+```bash
+cd android
+./gradlew clean
+cd ..
+npx react-native run-android
+```
+
+If issues persist, reset Metro cache:
+```bash
+npx react-native start --reset-cache
+```
+
+### New Architecture Not Enabled
+
+**Error Message**: Architecture-related errors or feature not available
+
+**Solution for Expo**:
+
+Update `app.json`:
+```json
+{
+  "expo": {
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": { "newArchEnabled": true },
+          "android": { "newArchEnabled": true }
+        }
+      ]
+    ]
+  }
+}
+```
+
+Then rebuild:
+```bash
+npx expo prebuild --clean
+npx expo run:ios  # or run:android
+```
+
+**Solution for Bare React Native**:
+
+iOS - Edit `ios/Podfile`:
+```ruby
+:fabric_enabled => true
+```
+
+Android - Edit `android/gradle.properties`:
+```properties
+newArchEnabled=true
+```
+
+Then clean and rebuild:
+```bash
+cd ios && rm -rf Pods Podfile.lock && pod install && cd ..
+cd android && ./gradlew clean && cd ..
+```
+
+## Model Loading Issues
+
+### Model Not Loading (isReady stays false)
+
+**Symptoms**: `isReady` stays `false`, `downloadProgress` not increasing
+
+**Debugging Steps**:
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+useEffect(() => {
+  console.log('Download progress:', llm.downloadProgress);
+  console.log('Is ready:', llm.isReady);
+  console.log('Error:', llm.error);
+}, [llm.downloadProgress, llm.isReady, llm.error]);
+```
+
+**Common Causes**:
+
+1. **Network Issues**: Check internet connectivity
+2. **Invalid URL**: Verify model URL is accessible
+3. **Insufficient Storage**: Check available device storage
+4. **Resource Fetcher Not Initialized**: See above
+
+**Solution**:
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// Check if model is already downloaded
+const models = await ExpoResourceFetcher.listDownloadedModels();
+console.log('Downloaded models:', models);
+
+// Try manual download with error handling
+try {
+  await ExpoResourceFetcher.fetch(
+    (progress) => console.log(`Progress: ${progress * 100}%`),
+    'https://model-url.pte'
+  );
+} catch (error) {
+  console.error('Download failed:', error);
+}
+```
+
+### Download Fails or Interrupts
+
+**Error Message**: `ResourceFetcherDownloadFailed (Code 180)` or `DownloadInterrupted (Code 118)`
+
+**Solution**: Implement retry logic
+
+```typescript
+const downloadWithRetry = async (
+  url: string,
+  maxRetries = 3
+): Promise<string[] | null> => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const paths = await ExpoResourceFetcher.fetch(
+        (progress) => console.log(`Attempt ${i + 1}: ${progress * 100}%`),
+        url
+      );
+      return paths;
+    } catch (error) {
+      console.log(`Attempt ${i + 1} failed`);
+      if (i === maxRetries - 1) throw error;
+      
+      // Wait before retrying (exponential backoff)
+      await new Promise(resolve => 
+        setTimeout(resolve, 1000 * Math.pow(2, i))
+      );
+    }
+  }
+  return null;
+};
+```
+
+### Invalid Model File
+
+**Error Message**: `InvalidProgram (Code 35)`
+
+**Causes**:
+- Corrupted download
+- Wrong file format
+- Model not properly exported
+
+**Solution**:
+
+1. Delete and re-download:
+```typescript
+await ExpoResourceFetcher.deleteResources('https://model-url.pte');
+await ExpoResourceFetcher.fetch(() => {}, 'https://model-url.pte');
+```
+
+2. Verify file is valid `.pte` format
+3. Re-export model using correct ExecuTorch export process
+
+## Memory Issues
+
+### Out of Memory / App Crashes
+
+**Error Message**: `MemoryAllocationFailed (Code 33)` or app crashes without error
+
+**Immediate Solution**: Use quantized models
+
+```typescript
+import { 
+  LLAMA3_2_1B_SPINQUANT,  // Instead of LLAMA3_2_1B
+} from 'react-native-executorch';
+
+const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT });
+```
+
+**Memory Requirements**:
+
+| Model | iOS Memory | Android Memory |
+|-------|-----------|---------------|
+| LLAMA3_2_1B | 3.1 GB | 3.3 GB |
+| LLAMA3_2_1B_SPINQUANT | 2.4 GB | 1.9 GB |
+| LLAMA3_2_3B | 7.3 GB | 7.1 GB |
+| LLAMA3_2_3B_SPINQUANT | 3.8 GB | 3.7 GB |
+
+**Long-term Solutions**:
+
+1. **Increase Android Emulator RAM**: Set to 4GB+ in AVD Manager
+
+2. **Enable large heap (Android)**:
+```xml
+<!-- android/app/src/main/AndroidManifest.xml -->
+<application
+  android:largeHeap="true"
+  ...>
+</application>
+```
+
+3. **Use context strategies**:
+```typescript
+import { SlidingWindowContextStrategy } from 'react-native-executorch';
+
+llm.configure({
+  chatConfig: {
+    contextStrategy: new SlidingWindowContextStrategy({
+      maxTokens: 2048,  // Limit context size
+    }),
+  },
+});
+```
+
+4. **Unload models when not needed**:
+```typescript
+import { LLMModule } from 'react-native-executorch';
+
+const llm = new LLMModule();
+await llm.load(/* ... */);
+
+// Use model
+await llm.generate(messages);
+
+// Free memory when done
+llm.delete();
+```
+
+See [Memory Management](/advanced/memory-management) for comprehensive strategies.
+
+### Memory Warnings (iOS)
+
+**Solution**: Handle memory warnings
+
+```typescript
+import { AppState } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { LLMModule } from 'react-native-executorch';
+
+function App() {
+  const llmRef = useRef<LLMModule | null>(null);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('memoryWarning', () => {
+      console.warn('Memory warning - unloading model');
+      if (llmRef.current) {
+        llmRef.current.delete();
+        llmRef.current = null;
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  return /* Your app */;
+}
+```
+
+## Generation Issues
+
+### Model Not Generating (hangs)
+
+**Symptoms**: `generate()` never completes, `isGenerating` stays `true`
+
+**Solution**: Implement timeout and interrupt
+
+```typescript
+const generateWithTimeout = async (
+  llm: LLMType,
+  messages: Message[],
+  timeoutMs = 30000
+) => {
+  const timeout = setTimeout(() => {
+    console.warn('Generation timeout - interrupting');
+    llm.interrupt();
+  }, timeoutMs);
+
+  try {
+    await llm.generate(messages);
+    clearTimeout(timeout);
+    return llm.response;
+  } catch (error) {
+    clearTimeout(timeout);
+    throw error;
+  }
+};
+```
+
+### Empty or Unexpected Responses
+
+**Causes**:
+- Invalid input format
+- Model not configured correctly
+- Temperature/sampling issues
+
+**Solution**: Validate inputs and configuration
+
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B });
+
+// Configure properly
+llm.configure({
+  generationConfig: {
+    temperature: 0.7,  // Reasonable value
+    topP: 0.9,
+    maxTokens: 512,
+  },
+});
+
+// Ensure valid message format
+const messages: Message[] = [
+  { role: 'system', content: 'You are a helpful assistant' },
+  { role: 'user', content: 'Hello!' },
+];
+
+if (messages.length === 0) {
+  console.error('Empty message array');
+  return;
+}
+
+try {
+  await llm.generate(messages);
+  
+  if (llm.response.length === 0) {
+    console.warn('Empty response generated');
+  }
+} catch (error) {
+  console.error('Generation error:', error);
+}
+```
+
+### ModelGenerating Error
+
+**Error Message**: `ModelGenerating (Code 104)`
+
+**Cause**: Trying to run inference while model is already generating
+
+**Solution**: Check `isGenerating` before calling
+
+```typescript
+const handleGenerate = async () => {
+  if (llm.isGenerating) {
+    console.warn('Model is already generating');
+    return;
+  }
+
+  await llm.generate(messages);
+};
+```
+
+## Input/Output Issues
+
+### FileReadFailed Error
+
+**Error Message**: `FileReadFailed (Code 114)`
+
+**Causes**:
+- Invalid file path
+- File doesn't exist
+- Unsupported image format
+- Permissions issue
+
+**Solution for Images**:
+
+```typescript
+import { useClassification } from 'react-native-executorch';
+
+const classifier = useClassification({ model: EFFICIENTNET_V2_S });
+
+// Validate image URI
+const classifyImage = async (imageUri: string) => {
+  if (!imageUri) {
+    console.error('No image URI provided');
+    return;
+  }
+
+  if (!imageUri.startsWith('file://')) {
+    console.error('Invalid image URI:', imageUri);
+    return;
+  }
+
+  try {
+    const result = await classifier.classify({ image: imageUri });
+    return result;
+  } catch (error) {
+    console.error('Classification failed:', error);
+  }
+};
+```
+
+### WrongDimensions Error
+
+**Error Message**: `WrongDimensions (Code 116)`
+
+**Cause**: Input tensor shape doesn't match model's expected shape
+
+**Solution**: Verify input dimensions
+
+```typescript
+import { Tensor } from 'react-native-executorch';
+
+// Check model requirements
+// Example: ResNet expects [1, 3, 224, 224]
+
+const input = Tensor.from({
+  data: new Float32Array(1 * 3 * 224 * 224),
+  shape: [1, 3, 224, 224],  // Match model's expected shape
+  dtype: 'float32',
+});
+
+const output = await module.forward([input]);
+```
+
+### TokenizerError
+
+**Error Message**: `TokenizerError (Code 167)`
+
+**Causes**:
+- Tokenizer file missing or corrupted
+- Tokenizer config missing
+- Incompatible tokenizer
+
+**Solution**:
+
+```typescript
+import { LLAMA3_2_1B } from 'react-native-executorch';
+
+// Ensure all three sources are provided
+const llm = useLLM({
+  model: {
+    modelSource: LLAMA3_2_1B.modelSource,
+    tokenizerSource: LLAMA3_2_1B.tokenizerSource,
+    tokenizerConfigSource: LLAMA3_2_1B.tokenizerConfigSource,
+  },
+});
+
+// Check for errors
+useEffect(() => {
+  if (llm.error?.code === RnExecutorchErrorCode.TokenizerError) {
+    console.error('Tokenizer failed to load');
+    // Re-download tokenizer files
+  }
+}, [llm.error]);
+```
+
+## Platform-Specific Issues
+
+### iOS Simulator Issues
+
+**Problem**: Slow performance or crashes on simulator
+
+**Solution**: Test on real devices. Simulators don't reflect actual performance.
+
+For basic testing on simulator:
+```typescript
+import { Platform } from 'react-native';
+
+if (Platform.OS === 'ios' && __DEV__) {
+  // Use smaller model for simulator testing
+  const model = LLAMA3_2_1B_SPINQUANT; // Smaller footprint
+}
+```
+
+### Android Emulator Performance
+
+**Problem**: Slow inference or OOM on emulator
+
+**Solution**: Increase emulator resources
+
+1. Open Android Studio
+2. Tools → AVD Manager
+3. Edit your virtual device
+4. Show Advanced Settings
+5. Set RAM to 4096 MB or higher
+6. Set VM heap to 512 MB
+7. Enable hardware acceleration
+
+### iOS Build Errors
+
+**Problem**: CocoaPods errors or build failures
+
+**Solution**:
+
+```bash
+cd ios
+
+# Clean everything
+rm -rf Pods Podfile.lock
+rm -rf ~/Library/Developer/Xcode/DerivedData
+
+# Reinstall
+pod deintegrate
+pod install
+
+cd ..
+npx react-native run-ios
+```
+
+### Android Build Errors
+
+**Problem**: Gradle errors or dependency conflicts
+
+**Solution**:
+
+```bash
+cd android
+
+# Clean build
+./gradlew clean
+rm -rf .gradle
+
+# Clear cache
+rm -rf ~/.gradle/caches
+
+cd ..
+npx react-native run-android
+```
+
+## Performance Issues
+
+### Slow Inference Speed
+
+**Solutions**:
+
+1. **Use quantized models**:
+```typescript
+const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT });
+```
+
+2. **Reduce generation length**:
+```typescript
+llm.configure({
+  generationConfig: {
+    maxTokens: 256,  // Shorter responses = faster
+  },
+});
+```
+
+3. **Limit context**:
+```typescript
+import { SlidingWindowContextStrategy } from 'react-native-executorch';
+
+llm.configure({
+  chatConfig: {
+    contextStrategy: new SlidingWindowContextStrategy({
+      maxTokens: 1024,  // Smaller context
+    }),
+  },
+});
+```
+
+4. **Use appropriate backends**: Ensure model was exported with XNNPACK or Core ML
+
+See [Performance Optimization](/advanced/performance-optimization) for more strategies.
+
+### Slow Downloads
+
+**Solution**: Pre-download models and cache them
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+// Download during app idle time
+const preloadModels = async () => {
+  try {
+    await ExpoResourceFetcher.fetch(
+      (progress) => console.log(`Preload: ${progress * 100}%`),
+      LLAMA3_2_1B.modelSource,
+      LLAMA3_2_1B.tokenizerSource,
+      LLAMA3_2_1B.tokenizerConfigSource
+    );
+    console.log('Models preloaded');
+  } catch (error) {
+    console.error('Preload failed:', error);
+  }
+};
+```
+
+## Debugging Best Practices
+
+### Enable Comprehensive Logging
+
+```typescript
+import { useLLM } from 'react-native-executorch';
+import { useEffect } from 'react';
+
+function DebugComponent() {
+  const llm = useLLM({ model: LLAMA3_2_1B });
+
+  useEffect(() => {
+    console.log('=== LLM State ===');
+    console.log('isReady:', llm.isReady);
+    console.log('isGenerating:', llm.isGenerating);
+    console.log('downloadProgress:', llm.downloadProgress);
+    console.log('error:', llm.error);
+    console.log('response length:', llm.response?.length);
+    console.log('================');
+  }, [
+    llm.isReady,
+    llm.isGenerating,
+    llm.downloadProgress,
+    llm.error,
+    llm.response,
+  ]);
+
+  return /* Your UI */;
+}
+```
+
+### Check Model Files
+
+```typescript
+import { ExpoResourceFetcher } from '@react-native-executorch/expo-resource-fetcher';
+
+const debugStorage = async () => {
+  const files = await ExpoResourceFetcher.listDownloadedFiles();
+  const models = await ExpoResourceFetcher.listDownloadedModels();
+  
+  console.log('All files:', files);
+  console.log('Model files:', models);
+  
+  for (const model of models) {
+    console.log('Model path:', model);
+  }
+};
+```
+
+### Profile Performance
+
+```typescript
+const profileGeneration = async () => {
+  const startTime = Date.now();
+  
+  await llm.generate(messages);
+  
+  const endTime = Date.now();
+  const duration = (endTime - startTime) / 1000;
+  
+  console.log('=== Performance ===');
+  console.log('Duration:', duration, 'seconds');
+  console.log('Prompt tokens:', llm.getPromptTokenCount());
+  console.log('Generated tokens:', llm.getGeneratedTokenCount());
+  console.log('Total tokens:', llm.getTotalTokenCount());
+  console.log('Speed:', (llm.getGeneratedTokenCount() / duration).toFixed(2), 'tokens/sec');
+  console.log('==================');
+};
+```
+
+## Getting Help
+
+If you're still experiencing issues:
+
+1. **Check Documentation**:
+   - [Memory Management](/advanced/memory-management)
+   - [Performance Optimization](/advanced/performance-optimization)
+   - [Debugging Guide](/advanced/debugging)
+
+2. **Search Existing Issues**: [GitHub Issues](https://github.com/software-mansion/react-native-executorch/issues)
+
+3. **Ask the Community**: [GitHub Discussions](https://github.com/software-mansion/react-native-executorch/discussions)
+
+4. **Report a Bug**: Include:
+   - React Native ExecuTorch version
+   - React Native version
+   - Platform (iOS/Android) and version
+   - Minimal reproduction code
+   - Error messages and logs
+   - Device specs (RAM, OS version)
+
+## Quick Checklist
+
+When encountering issues, verify:
+
+- [ ] Resource fetcher is initialized
+- [ ] New Architecture is enabled
+- [ ] Model is downloaded (check `downloadProgress`)
+- [ ] Model is loaded (check `isReady`)
+- [ ] No errors (check `error` state)
+- [ ] Sufficient device memory for model
+- [ ] Input format matches model requirements
+- [ ] Testing on real device, not just emulator
+- [ ] Using latest version of React Native ExecuTorch
+
+## Next Steps
+
+- Review [Debugging Guide](/advanced/debugging) for advanced techniques
+- Learn about [Memory Management](/advanced/memory-management)
+- Optimize with [Performance Guide](/advanced/performance-optimization)

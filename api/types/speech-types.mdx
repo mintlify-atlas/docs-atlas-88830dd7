@@ -1,0 +1,440 @@
+---
+title: 'Speech Types'
+description: 'TypeScript types for Speech functionality (STT, TTS, VAD)'
+---
+
+## Speech to Text Types
+
+### SpeechToTextProps
+
+Configuration for Speech to Text model.
+
+<ResponseField name="model" type="SpeechToTextModelConfig" required>
+  Configuration object containing model sources.
+</ResponseField>
+
+<ResponseField name="preventLoad" type="boolean">
+  Boolean that can prevent automatic model loading (and downloading the data if you load it for the first time) after running the hook.
+</ResponseField>
+
+### SpeechToTextType
+
+React hook for managing Speech to Text (STT) instance.
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains the error message if the model failed to load.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the model has successfully loaded and is ready for inference.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing an inference.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Tracks the progress of the model download process.
+</ResponseField>
+
+<ResponseField name="encode" type="(waveform: Float32Array) => Promise<Float32Array>">
+  Runs the encoding part of the model on the provided waveform.
+  
+  **Parameters:**
+  - `waveform` (Float32Array) - The input audio waveform array.
+  
+  **Returns:** A promise resolving to the encoded data.
+</ResponseField>
+
+<ResponseField name="decode" type="(tokens: Int32Array, encoderOutput: Float32Array) => Promise<Float32Array>">
+  Runs the decoder of the model.
+  
+  **Parameters:**
+  - `tokens` (Int32Array) - The encoded audio data.
+  - `encoderOutput` (Float32Array) - The output from the encoder.
+  
+  **Returns:** A promise resolving to the decoded text.
+</ResponseField>
+
+<ResponseField name="transcribe" type="(waveform: Float32Array, options?: DecodingOptions) => Promise<TranscriptionResult>">
+  Starts a transcription process for a given input array, which should be a waveform at 16kHz.
+  
+  **Parameters:**
+  - `waveform` (Float32Array) - The input audio waveform.
+  - `options` (DecodingOptions, optional) - Decoding options, check API reference for more details.
+  
+  **Returns:** Resolves a promise with the output transcription. Result of transcription is object of type `TranscriptionResult`.
+</ResponseField>
+
+<ResponseField name="stream" type="(options?: DecodingOptions) => AsyncGenerator">
+  Starts a streaming transcription process. Use in combination with `streamInsert` to feed audio chunks and `streamStop` to end the stream. Updates `committedTranscription` and `nonCommittedTranscription` as transcription progresses.
+  
+  **Parameters:**
+  - `options` (DecodingOptions, optional) - Decoding options including language.
+  
+  **Returns:** Asynchronous generator that returns `committed` and `nonCommitted` transcription. Both `committed` and `nonCommitted` are of type `TranscriptionResult`.
+</ResponseField>
+
+<ResponseField name="streamInsert" type="(waveform: Float32Array) => void">
+  Inserts a chunk of audio data (sampled at 16kHz) into the ongoing streaming transcription.
+  
+  **Parameters:**
+  - `waveform` (Float32Array) - The audio chunk to insert.
+</ResponseField>
+
+<ResponseField name="streamStop" type="() => void">
+  Stops the ongoing streaming transcription process.
+</ResponseField>
+
+### SpeechToTextLanguage
+
+Languages supported by whisper (not whisper.en).
+
+```typescript
+type SpeechToTextLanguage =
+  | 'af' | 'sq' | 'ar' | 'hy' | 'az' | 'eu' | 'be' | 'bn' | 'bs' | 'bg'
+  | 'my' | 'ca' | 'zh' | 'hr' | 'cs' | 'da' | 'nl' | 'et' | 'en' | 'fi'
+  | 'fr' | 'gl' | 'ka' | 'de' | 'el' | 'gu' | 'ht' | 'he' | 'hi' | 'hu'
+  | 'is' | 'id' | 'it' | 'ja' | 'kn' | 'kk' | 'km' | 'ko' | 'lo' | 'lv'
+  | 'lt' | 'mk' | 'mg' | 'ms' | 'ml' | 'mt' | 'mr' | 'ne' | 'no' | 'fa'
+  | 'pl' | 'pt' | 'pa' | 'ro' | 'ru' | 'sr' | 'si' | 'sk' | 'sl' | 'es'
+  | 'su' | 'sw' | 'sv' | 'tl' | 'tg' | 'ta' | 'te' | 'th' | 'tr' | 'uk'
+  | 'ur' | 'uz' | 'vi' | 'cy' | 'yi';
+```
+
+### DecodingOptions
+
+Options for decoding speech to text.
+
+<ResponseField name="language" type="SpeechToTextLanguage">
+  Optional language code to guide the transcription.
+</ResponseField>
+
+<ResponseField name="verbose" type="boolean">
+  Optional flag. If set, transcription result is presented with timestamps and with additional parameters. For more details please refer to `TranscriptionResult`.
+</ResponseField>
+
+### Word
+
+Structure that represent single token with timestamp information.
+
+<ResponseField name="word" type="string" required>
+  Token as a string value.
+</ResponseField>
+
+<ResponseField name="start" type="number" required>
+  Timestamp of the beginning of the token in audio (in seconds).
+</ResponseField>
+
+<ResponseField name="end" type="number" required>
+  Timestamp of the end of the token in audio (in seconds).
+</ResponseField>
+
+### TranscriptionSegment
+
+Structure that represent single Segment of transcription.
+
+<ResponseField name="start" type="number" required>
+  Timestamp of the beginning of the segment in audio (in seconds).
+</ResponseField>
+
+<ResponseField name="end" type="number" required>
+  Timestamp of the end of the segment in audio (in seconds).
+</ResponseField>
+
+<ResponseField name="text" type="string" required>
+  Full text of the given segment as a string.
+</ResponseField>
+
+<ResponseField name="words" type="Word[]">
+  If `verbose` set to `true` in `DecodingOptions`, it returns word-level timestamping as an array of `Word`.
+</ResponseField>
+
+<ResponseField name="tokens" type="number[]" required>
+  Raw tokens represented as table of integers.
+</ResponseField>
+
+<ResponseField name="temperature" type="number" required>
+  Temperature for which given segment was computed.
+</ResponseField>
+
+<ResponseField name="avgLogprob" type="number" required>
+  Average log probability calculated across all tokens in a segment.
+</ResponseField>
+
+<ResponseField name="compressionRatio" type="number" required>
+  Compression ration achieved on a given segment.
+</ResponseField>
+
+### TranscriptionResult
+
+Structure that represent result of transcription for a one function call (either `transcribe` or `stream`).
+
+<ResponseField name="task" type="'transcribe' | 'stream'">
+  String indicating task, either 'transcribe' or 'stream'.
+</ResponseField>
+
+<ResponseField name="language" type="string" required>
+  Language chosen for transcription.
+</ResponseField>
+
+<ResponseField name="duration" type="number" required>
+  Duration in seconds of a given transcription.
+</ResponseField>
+
+<ResponseField name="text" type="string" required>
+  The whole text of a transcription as a `string`.
+</ResponseField>
+
+<ResponseField name="segments" type="TranscriptionSegment[]">
+  If `verbose` set to `true` in `DecodingOptions`, it contains array of `TranscriptionSegment` with details split into separate transcription segments.
+</ResponseField>
+
+### SpeechToTextModelConfig
+
+Configuration for Speech to Text model.
+
+<ResponseField name="isMultilingual" type="boolean" required>
+  A boolean flag indicating whether the model supports multiple languages.
+</ResponseField>
+
+<ResponseField name="encoderSource" type="ResourceSource" required>
+  A string that specifies the location of a `.pte` file for the encoder.
+</ResponseField>
+
+<ResponseField name="decoderSource" type="ResourceSource" required>
+  A string that specifies the location of a `.pte` file for the decoder.
+</ResponseField>
+
+<ResponseField name="tokenizerSource" type="ResourceSource" required>
+  A string that specifies the location to the tokenizer for the model.
+</ResponseField>
+
+## Text to Speech Types
+
+### TextToSpeechLanguage
+
+List all the languages available in TTS models (as lang shorthands).
+
+```typescript
+type TextToSpeechLanguage =
+  | 'en-us' // American English
+  | 'en-gb'; // British English
+```
+
+### VoiceConfig
+
+Voice configuration. So far in Kokoro, each voice is directly associated with a language.
+
+<ResponseField name="lang" type="TextToSpeechLanguage" required>
+  Speaker's language.
+</ResponseField>
+
+<ResponseField name="voiceSource" type="ResourceSource" required>
+  A source to a binary file with voice embedding.
+</ResponseField>
+
+<ResponseField name="extra" type="KokoroVoiceExtras">
+  An optional extra sources or properties related to specific voice.
+</ResponseField>
+
+### KokoroVoiceExtras
+
+Kokoro-specific voice extra props.
+
+<ResponseField name="taggerSource" type="ResourceSource" required>
+  Source to Kokoro's tagger model binary.
+</ResponseField>
+
+<ResponseField name="lexiconSource" type="ResourceSource" required>
+  Source to Kokoro's lexicon binary.
+</ResponseField>
+
+### KokoroConfig
+
+Kokoro model configuration. Only the core Kokoro model sources, as phonemizer sources are included in voice configuration.
+
+<ResponseField name="type" type="'kokoro'" required>
+  Model type identifier.
+</ResponseField>
+
+<ResponseField name="durationPredictorSource" type="ResourceSource" required>
+  Source to Kokoro's duration predictor model binary.
+</ResponseField>
+
+<ResponseField name="synthesizerSource" type="ResourceSource" required>
+  Source to Kokoro's synthesizer model binary.
+</ResponseField>
+
+### TextToSpeechConfig
+
+General Text to Speech module configuration.
+
+<ResponseField name="model" type="KokoroConfig" required>
+  A selected T2S model.
+</ResponseField>
+
+<ResponseField name="voice" type="VoiceConfig" required>
+  A selected speaker's voice.
+</ResponseField>
+
+### TextToSpeechProps
+
+Props for the useTextToSpeech hook.
+
+<ResponseField name="model" type="KokoroConfig" required>
+  A selected T2S model.
+</ResponseField>
+
+<ResponseField name="voice" type="VoiceConfig" required>
+  A selected speaker's voice.
+</ResponseField>
+
+<ResponseField name="preventLoad" type="boolean">
+  Boolean that can prevent automatic model loading (and downloading the data if you load it for the first time) after running the hook.
+</ResponseField>
+
+### TextToSpeechInput
+
+Text to Speech module input definition.
+
+<ResponseField name="text" type="string" required>
+  A text to be spoken.
+</ResponseField>
+
+<ResponseField name="speed" type="number">
+  Optional speed argument - the higher it is, the faster the speech becomes.
+</ResponseField>
+
+### TextToSpeechType
+
+Return type for the `useTextToSpeech` hook. Manages the state and operations for Text-to-Speech generation.
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains the error object if the model failed to load or encountered an error during inference.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the Text-to-Speech model is loaded and ready to accept inputs.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently generating audio.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Represents the download progress of the model and voice assets as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="forward" type="(input: TextToSpeechInput) => Promise<Float32Array>">
+  Runs the model to convert the provided text into speech audio in a single pass.
+  
+  **Parameters:**
+  - `input` (TextToSpeechInput) - The `TextToSpeechInput` object containing the `text` to synthesize and optional `speed`.
+  
+  **Returns:** A Promise that resolves with the generated audio data (typically a `Float32Array`).
+  
+  **Throws:** `RnExecutorchError` if the model is not loaded or is currently generating.
+</ResponseField>
+
+<ResponseField name="stream" type="(input: TextToSpeechStreamingInput) => Promise<void>">
+  Streams the generated audio data incrementally. This is optimal for real-time playback, allowing audio to start playing before the full text is synthesized.
+  
+  **Parameters:**
+  - `input` (TextToSpeechStreamingInput) - The `TextToSpeechStreamingInput` object containing `text`, optional `speed`, and lifecycle callbacks (`onBegin`, `onNext`, `onEnd`).
+  
+  **Returns:** A Promise that resolves when the streaming process is complete.
+  
+  **Throws:** `RnExecutorchError` if the model is not loaded or is currently generating.
+</ResponseField>
+
+<ResponseField name="streamStop" type="() => void">
+  Interrupts and stops the currently active audio generation stream.
+</ResponseField>
+
+### TextToSpeechStreamingInput
+
+Text to Speech streaming input definition. Streaming mode in T2S is synchronized by passing specific callbacks executed at given moments of the streaming. Actions such as playing the audio should happen within the onNext callback. Callbacks can be both synchronous or asynchronous.
+
+<ResponseField name="text" type="string" required>
+  A text to be spoken.
+</ResponseField>
+
+<ResponseField name="speed" type="number">
+  Optional speed argument - the higher it is, the faster the speech becomes.
+</ResponseField>
+
+<ResponseField name="onBegin" type="() => void | Promise<void>">
+  Called when streaming begins.
+</ResponseField>
+
+<ResponseField name="onNext" type="(audio: Float32Array) => void | Promise<void>">
+  Called after each audio chunk gets calculated.
+</ResponseField>
+
+<ResponseField name="onEnd" type="() => void | Promise<void>">
+  Called when streaming ends.
+</ResponseField>
+
+## Voice Activity Detection Types
+
+### VADProps
+
+Props for the useVAD hook.
+
+<ResponseField name="model" type="object" required>
+  An object containing the model source.
+  
+  <Expandable title="properties">
+    <ResponseField name="modelSource" type="ResourceSource" required>
+      The source of the VAD model binary.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="preventLoad" type="boolean">
+  Boolean that can prevent automatic model loading (and downloading the data if you load it for the first time) after running the hook.
+</ResponseField>
+
+### Segment
+
+Represents a detected audio segment with start and end timestamps.
+
+<ResponseField name="start" type="number" required>
+  Start time of the segment in seconds.
+</ResponseField>
+
+<ResponseField name="end" type="number" required>
+  End time of the segment in seconds.
+</ResponseField>
+
+### VADType
+
+React hook state and methods for managing a Voice Activity Detection (VAD) model instance.
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains the error message if the VAD model failed to load or during processing.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the VAD model has successfully loaded and is ready for inference.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing an inference.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Represents the download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="forward" type="(waveform: Float32Array) => Promise<Segment[]>">
+  Runs the Voice Activity Detection model on the provided audio waveform.
+  
+  **Parameters:**
+  - `waveform` (Float32Array) - The input audio waveform array.
+  
+  **Returns:** A promise resolving to an array of detected audio segments (e.g., timestamps for speech).
+  
+  **Throws:** `RnExecutorchError` if the model is not loaded or is currently processing another request.
+</ResponseField>

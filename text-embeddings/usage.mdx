@@ -1,0 +1,344 @@
+---
+title: Using Text Embeddings
+description: Learn how to use the useTextEmbeddings hook to generate text embeddings
+---
+
+## Installation
+
+First, ensure you have the package installed:
+
+```bash
+npm install react-native-executorch
+```
+
+## Basic Usage
+
+The `useTextEmbeddings` hook manages the text embeddings model lifecycle and provides methods to generate embeddings.
+
+```tsx
+import { useTextEmbeddings, ALL_MINILM_L6_V2 } from 'react-native-executorch';
+
+function MyComponent() {
+  const model = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+
+  const generateEmbedding = async () => {
+    if (!model.isReady) return;
+
+    try {
+      const embedding = await model.forward('Hello world');
+      console.log('Embedding dimensions:', embedding.length);
+      // Output: Embedding dimensions: 384
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  return (
+    <View>
+      <Text>Model Status: {model.isReady ? 'Ready' : 'Loading...'}</Text>
+      <Button title="Generate" onPress={generateEmbedding} />
+    </View>
+  );
+}
+```
+
+## API Reference
+
+### useTextEmbeddings
+
+React hook for managing a text embeddings model instance.
+
+```typescript
+const model = useTextEmbeddings(props: TextEmbeddingsProps): TextEmbeddingsType
+```
+
+#### Parameters
+
+<ParamField path="model" type="object" required>
+  Configuration object containing model and tokenizer sources
+  
+  <Expandable title="properties">
+    <ParamField path="modelSource" type="ResourceSource" required>
+      The source of the text embeddings model binary (URL or local file)
+    </ParamField>
+    
+    <ParamField path="tokenizerSource" type="ResourceSource" required>
+      The source of the tokenizer JSON file (URL or local file)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default={false}>
+  Prevent automatic model loading on mount. Useful for conditional loading.
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error information if model loading or inference fails
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the model has successfully loaded and is ready for inference
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently generating embeddings
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress value between 0 and 1
+</ResponseField>
+
+<ResponseField name="forward" type="(input: string) => Promise<Float32Array>">
+  Generates embeddings for the provided text input
+  
+  **Parameters:**
+  - `input` (string): The text to embed
+  
+  **Returns:** Promise resolving to Float32Array containing the embedding vector
+  
+  **Throws:** RnExecutorchError if model is not loaded or is currently processing
+</ResponseField>
+
+## Model Configuration
+
+### Using Pre-configured Models
+
+The library provides pre-configured model constants:
+
+```tsx
+import { 
+  useTextEmbeddings, 
+  ALL_MINILM_L6_V2,
+  CLIP_VIT_BASE_PATCH32_TEXT 
+} from 'react-native-executorch';
+
+// MiniLM model (384-dimensional embeddings)
+const miniLMModel = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+
+// CLIP text model (512-dimensional embeddings)
+const clipModel = useTextEmbeddings({ model: CLIP_VIT_BASE_PATCH32_TEXT });
+```
+
+### Using Custom Models
+
+You can use your own models by providing custom sources:
+
+```tsx
+const model = useTextEmbeddings({
+  model: {
+    modelSource: 'https://example.com/my-model.pte',
+    tokenizerSource: 'https://example.com/tokenizer.json'
+  }
+});
+```
+
+## Handling Model State
+
+### Loading Progress
+
+Monitor download progress while the model loads:
+
+```tsx
+function ModelStatus() {
+  const model = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+
+  const getStatusText = () => {
+    if (model.error) {
+      return `Error: ${model.error.message}`;
+    }
+    if (!model.isReady) {
+      return `Loading model ${(model.downloadProgress * 100).toFixed(2)}%`;
+    }
+    return model.isGenerating ? 'Generating...' : 'Model is ready';
+  };
+
+  return <Text>{getStatusText()}</Text>;
+}
+```
+
+### Conditional Loading
+
+Defer model loading until needed:
+
+```tsx
+function ConditionalEmbeddings() {
+  const [shouldLoad, setShouldLoad] = useState(false);
+  
+  const model = useTextEmbeddings({ 
+    model: ALL_MINILM_L6_V2,
+    preventLoad: !shouldLoad 
+  });
+
+  return (
+    <View>
+      <Button 
+        title="Load Model" 
+        onPress={() => setShouldLoad(true)} 
+      />
+      {model.isReady && <Text>Model ready!</Text>}
+    </View>
+  );
+}
+```
+
+### Error Handling
+
+```tsx
+const model = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+
+if (model.error) {
+  return (
+    <View>
+      <Text>Failed to load model</Text>
+      <Text>Error: {model.error.message}</Text>
+      <Text>Code: {model.error.code}</Text>
+    </View>
+  );
+}
+```
+
+## Generating Embeddings
+
+### Single Text Embedding
+
+```tsx
+const embedding = await model.forward('This is a sample sentence');
+console.log('Vector length:', embedding.length); // 384 for MiniLM
+console.log('First 5 values:', embedding.slice(0, 5));
+```
+
+### Batch Processing
+
+Generate embeddings for multiple texts:
+
+```tsx
+const texts = [
+  'The weather is lovely today.',
+  "It's so sunny outside!",
+  'He drove to the stadium.'
+];
+
+const embeddings = [];
+for (const text of texts) {
+  const embedding = await model.forward(text);
+  embeddings.push({ text, embedding });
+}
+
+console.log(`Generated ${embeddings.length} embeddings`);
+```
+
+<Note>
+  The `forward()` method processes one text at a time. For multiple texts, call it sequentially in a loop.
+</Note>
+
+### With State Management
+
+```tsx
+function EmbeddingGenerator() {
+  const model = useTextEmbeddings({ model: ALL_MINILM_L6_V2 });
+  const [input, setInput] = useState('');
+  const [embedding, setEmbedding] = useState<Float32Array | null>(null);
+
+  const handleGenerate = async () => {
+    if (!model.isReady || !input.trim()) return;
+
+    try {
+      const result = await model.forward(input);
+      setEmbedding(result);
+    } catch (error) {
+      console.error('Generation failed:', error);
+    }
+  };
+
+  return (
+    <View>
+      <TextInput
+        value={input}
+        onChangeText={setInput}
+        placeholder="Enter text..."
+      />
+      <Button 
+        title="Generate Embedding"
+        onPress={handleGenerate}
+        disabled={!model.isReady || model.isGenerating}
+      />
+      {embedding && (
+        <Text>Embedding dimensions: {embedding.length}</Text>
+      )}
+    </View>
+  );
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Check isReady before inference">
+    Always verify the model is ready before calling `forward()`:
+    
+    ```tsx
+    if (!model.isReady) {
+      console.log('Model not ready yet');
+      return;
+    }
+    const embedding = await model.forward(text);
+    ```
+  </Accordion>
+
+  <Accordion title="Handle loading states">
+    Provide feedback during model download and loading:
+    
+    ```tsx
+    {!model.isReady && (
+      <ActivityIndicator />
+    )}
+    {model.isReady && (
+      <Button title="Generate" onPress={handleGenerate} />
+    )}
+    ```
+  </Accordion>
+
+  <Accordion title="Catch errors">
+    Wrap inference calls in try-catch blocks:
+    
+    ```tsx
+    try {
+      const embedding = await model.forward(text);
+    } catch (error) {
+      console.error('Inference error:', error);
+      // Handle error appropriately
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Store embeddings efficiently">
+    Embeddings are Float32Arrays. Store them in state or cache for reuse:
+    
+    ```tsx
+    const [cache, setCache] = useState<Map<string, Float32Array>>(new Map());
+    
+    const getEmbedding = async (text: string) => {
+      if (cache.has(text)) {
+        return cache.get(text)!;
+      }
+      
+      const embedding = await model.forward(text);
+      setCache(prev => new Map(prev).set(text, embedding));
+      return embedding;
+    };
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Semantic Search" icon="search" href="./semantic-search">
+    Build a semantic search feature with embeddings
+  </Card>
+  <Card title="Overview" icon="book" href="./overview">
+    Learn more about text embeddings concepts
+  </Card>
+</CardGroup>

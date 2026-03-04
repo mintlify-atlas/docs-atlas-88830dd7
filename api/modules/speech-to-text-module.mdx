@@ -1,0 +1,490 @@
+---
+title: 'SpeechToTextModule'
+description: 'Class-based API for speech-to-text transcription'
+icon: 'microphone'
+---
+
+## Overview
+
+`SpeechToTextModule` provides a class-based interface for Speech-to-Text (STT) functionalities. It supports both single-shot transcription and streaming transcription with Whisper-based models.
+
+## When to Use
+
+**Use `SpeechToTextModule` when:**
+- You need manual control over transcription lifecycle
+- You're working outside React components
+- You need streaming transcription support
+- You want to integrate speech recognition into non-React code
+
+**Use `useSpeechToText` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Constructor
+
+```typescript
+new SpeechToTextModule()
+```
+
+Creates a new speech-to-text module instance.
+
+### Example
+
+```typescript
+import { SpeechToTextModule } from 'react-native-executorch';
+
+const stt = new SpeechToTextModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  model: SpeechToTextModelConfig,
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the speech-to-text model (encoder and decoder) and tokenizer.
+
+#### Parameters
+
+<ParamField path="model" type="SpeechToTextModelConfig" required>
+  Configuration object containing:
+  - `encoderSource`: Resource location of the encoder model
+  - `decoderSource`: Resource location of the decoder model
+  - `tokenizerSource`: Resource location of the tokenizer
+  - `isMultilingual`: Boolean indicating if the model supports multiple languages
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await stt.load(
+  {
+    encoderSource: 'https://example.com/whisper_encoder.pte',
+    decoderSource: 'https://example.com/whisper_decoder.pte',
+    tokenizerSource: 'https://example.com/tokenizer.json',
+    isMultilingual: false
+  },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### transcribe()
+
+```typescript
+async transcribe(
+  waveform: Float32Array,
+  options?: DecodingOptions
+): Promise<TranscriptionResult>
+```
+
+Transcribes the provided audio waveform (16kHz) to text.
+
+#### Parameters
+
+<ParamField path="waveform" type="Float32Array" required>
+  Audio data as a Float32Array (mono, 16kHz sample rate).
+</ParamField>
+
+<ParamField path="options" type="DecodingOptions" optional>
+  Decoding options:
+  - `language`: Language code (required for multilingual models, e.g., 'en', 'es', 'fr')
+  - `verbose`: If true, returns detailed transcription with timestamps
+</ParamField>
+
+#### Returns
+
+A `TranscriptionResult` object containing:
+- `text`: The transcribed text
+- `segments`: Array of segment objects (if `verbose: true`)
+
+#### Example
+
+```typescript
+// Simple transcription
+const result = await stt.transcribe(audioWaveform);
+console.log('Transcription:', result.text);
+
+// Multilingual with verbose output
+const verboseResult = await stt.transcribe(audioWaveform, {
+  language: 'es',
+  verbose: true
+});
+console.log('Text:', verboseResult.text);
+console.log('Segments:', verboseResult.segments);
+```
+
+### stream()
+
+```typescript
+async *stream(
+  options?: DecodingOptions
+): AsyncGenerator<{
+  committed: TranscriptionResult;
+  nonCommitted: TranscriptionResult;
+}>
+```
+
+Starts a streaming transcription session. Yields objects with committed and non-committed transcriptions.
+
+- **Committed transcription**: Finalized text that will not change
+- **Non-committed transcription**: Partial text still being processed
+
+Use with `streamInsert()` and `streamStop()` to control the stream.
+
+#### Parameters
+
+<ParamField path="options" type="DecodingOptions" optional>
+  Decoding options including language and verbose settings.
+</ParamField>
+
+#### Returns
+
+An async generator yielding transcription updates.
+
+#### Example
+
+```typescript
+// Start streaming session
+const streamGenerator = stt.stream({ language: 'en' });
+
+// In another part of your code, feed audio chunks
+stt.streamInsert(audioChunk1);
+stt.streamInsert(audioChunk2);
+
+// Process streaming results
+for await (const update of streamGenerator) {
+  console.log('Committed:', update.committed.text);
+  console.log('Partial:', update.nonCommitted.text);
+  
+  // Display both for real-time feedback
+  setTranscript(update.committed.text + update.nonCommitted.text);
+}
+
+// Stop when done
+stt.streamStop();
+```
+
+### streamInsert()
+
+```typescript
+streamInsert(waveform: Float32Array): void
+```
+
+Inserts a new audio chunk into the active streaming transcription session.
+
+#### Parameters
+
+<ParamField path="waveform" type="Float32Array" required>
+  Audio chunk to insert (mono, 16kHz).
+</ParamField>
+
+#### Example
+
+```typescript
+stt.streamInsert(audioChunk);
+```
+
+### streamStop()
+
+```typescript
+streamStop(): void
+```
+
+Stops the current streaming transcription session.
+
+#### Example
+
+```typescript
+stt.streamStop();
+```
+
+### encode()
+
+```typescript
+async encode(waveform: Float32Array): Promise<Float32Array>
+```
+
+Runs the encoding part of the model on the provided waveform. Returns the encoded representation.
+
+#### Parameters
+
+<ParamField path="waveform" type="Float32Array" required>
+  Input audio waveform.
+</ParamField>
+
+#### Returns
+
+The encoded output as a Float32Array.
+
+#### Example
+
+```typescript
+const encodedAudio = await stt.encode(audioWaveform);
+```
+
+### decode()
+
+```typescript
+async decode(
+  tokens: Int32Array,
+  encoderOutput: Float32Array
+): Promise<Float32Array>
+```
+
+Runs the decoder of the model with provided tokens and encoder output.
+
+#### Parameters
+
+<ParamField path="tokens" type="Int32Array" required>
+  Input token IDs.
+</ParamField>
+
+<ParamField path="encoderOutput" type="Float32Array" required>
+  Output from the encoder.
+</ParamField>
+
+#### Returns
+
+Decoded output as a Float32Array.
+
+#### Example
+
+```typescript
+const decodedOutput = await stt.decode(tokens, encoderOutput);
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Unloads the model from memory.
+
+#### Example
+
+```typescript
+stt.delete();
+```
+
+## Complete Example: Single-shot Transcription
+
+```typescript
+import { SpeechToTextModule } from 'react-native-executorch';
+import AudioRecorder from 'react-native-audio-recorder';
+
+class VoiceTranscriber {
+  private stt: SpeechToTextModule;
+
+  constructor() {
+    this.stt = new SpeechToTextModule();
+  }
+
+  async initialize() {
+    console.log('Loading speech-to-text model...');
+    await this.stt.load(
+      {
+        encoderSource: 'https://example.com/whisper_encoder.pte',
+        decoderSource: 'https://example.com/whisper_decoder.pte',
+        tokenizerSource: 'https://example.com/tokenizer.json',
+        isMultilingual: true
+      },
+      (progress) => {
+        console.log(`Loading: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    console.log('Model ready!');
+  }
+
+  async transcribeAudio(
+    audioPath: string,
+    language: string = 'en'
+  ): Promise<string> {
+    // Load and convert audio to 16kHz mono Float32Array
+    const waveform = await this.loadAudioFile(audioPath);
+    
+    const result = await this.stt.transcribe(waveform, {
+      language,
+      verbose: false
+    });
+    
+    return result.text;
+  }
+
+  private async loadAudioFile(path: string): Promise<Float32Array> {
+    // Implementation depends on your audio library
+    // This is a placeholder
+    const audioData = await AudioRecorder.loadFile(path);
+    return new Float32Array(audioData);
+  }
+
+  cleanup() {
+    this.stt.delete();
+  }
+}
+
+// Usage
+const transcriber = new VoiceTranscriber();
+await transcriber.initialize();
+
+const text = await transcriber.transcribeAudio(
+  '/path/to/audio.wav',
+  'en'
+);
+console.log('Transcription:', text);
+
+transcriber.cleanup();
+```
+
+## Complete Example: Streaming Transcription
+
+```typescript
+import { SpeechToTextModule } from 'react-native-executorch';
+
+class StreamingTranscriber {
+  private stt: SpeechToTextModule;
+  private isStreaming = false;
+
+  constructor() {
+    this.stt = new SpeechToTextModule();
+  }
+
+  async initialize() {
+    await this.stt.load({
+      encoderSource: 'https://example.com/encoder.pte',
+      decoderSource: 'https://example.com/decoder.pte',
+      tokenizerSource: 'https://example.com/tokenizer.json',
+      isMultilingual: false
+    });
+  }
+
+  async startStreaming(
+    onTranscript: (committed: string, partial: string) => void
+  ) {
+    this.isStreaming = true;
+    const streamGenerator = this.stt.stream({ language: 'en' });
+
+    // Process streaming results in the background
+    (async () => {
+      try {
+        for await (const update of streamGenerator) {
+          if (!this.isStreaming) break;
+          
+          onTranscript(
+            update.committed.text,
+            update.nonCommitted.text
+          );
+        }
+      } catch (error) {
+        console.error('Streaming error:', error);
+      }
+    })();
+  }
+
+  feedAudio(audioChunk: Float32Array) {
+    if (this.isStreaming) {
+      this.stt.streamInsert(audioChunk);
+    }
+  }
+
+  stopStreaming() {
+    this.isStreaming = false;
+    this.stt.streamStop();
+  }
+
+  cleanup() {
+    this.stt.delete();
+  }
+}
+
+// Usage
+const streamingTranscriber = new StreamingTranscriber();
+await streamingTranscriber.initialize();
+
+// Start streaming
+await streamingTranscriber.startStreaming((committed, partial) => {
+  console.log('Committed:', committed);
+  console.log('Partial:', partial);
+  
+  // Update UI with combined text
+  const fullText = committed + partial;
+  updateTranscriptionDisplay(fullText);
+});
+
+// Feed audio chunks as they arrive
+streamingTranscriber.feedAudio(chunk1);
+streamingTranscriber.feedAudio(chunk2);
+
+// Stop when done
+streamingTranscriber.stopStreaming();
+streamingTranscriber.cleanup();
+```
+
+## Audio Format Requirements
+
+- **Sample rate**: 16kHz (16,000 Hz)
+- **Channels**: Mono (single channel)
+- **Format**: Float32Array with normalized values (-1.0 to 1.0)
+- **Duration**: Recommended 30 seconds or less per chunk for best results
+
+## Multilingual Support
+
+```typescript
+// For multilingual models, specify the language
+const result = await stt.transcribe(waveform, {
+  language: 'es'  // Spanish
+});
+
+// Supported languages (examples):
+// 'en' - English
+// 'es' - Spanish
+// 'fr' - French
+// 'de' - German
+// 'zh' - Chinese
+// 'ja' - Japanese
+// 'ko' - Korean
+```
+
+## Verbose Mode
+
+```typescript
+const result = await stt.transcribe(waveform, {
+  language: 'en',
+  verbose: true
+});
+
+// Result includes segments with timestamps
+console.log(result.segments);
+// [
+//   { text: 'Hello', start: 0.0, end: 0.5 },
+//   { text: 'world', start: 0.5, end: 1.0 }
+// ]
+```
+
+## Performance Considerations
+
+- Transcription speed depends on audio length and model size
+- Streaming mode provides real-time feedback but uses more resources
+- Use single-shot transcription for pre-recorded audio
+- Always call `delete()` when done to free memory
+- Consider audio quality for better accuracy
+
+## See Also
+
+- [useSpeechToText Hook](/api/hooks/use-speech-to-text) - React hook alternative
+- [TranscriptionResult Type](/api/types/transcription-result)
+- [DecodingOptions Type](/api/types/decoding-options)
+- [SpeechToTextModelConfig Type](/api/types/speech-to-text-model-config)

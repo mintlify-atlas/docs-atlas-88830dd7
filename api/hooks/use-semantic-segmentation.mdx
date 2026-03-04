@@ -1,0 +1,485 @@
+---
+title: 'useSemanticSegmentation'
+description: 'React hook for semantic segmentation models'
+icon: 'layer-group'
+---
+
+## Overview
+
+The `useSemanticSegmentation` hook manages a semantic segmentation model instance. It processes images and returns per-pixel class predictions and probability masks for specified classes.
+
+## Import
+
+```typescript
+import { useSemanticSegmentation } from 'react-native-executorch';
+```
+
+## Hook Signature
+
+```typescript
+const segmenter = useSemanticSegmentation<C>({
+  model,
+  preventLoad
+}: SemanticSegmentationProps<C>): SemanticSegmentationType<SegmentationLabels<ModelNameOf<C>>>
+```
+
+## Parameters
+
+<ParamField path="model" type="SemanticSegmentationModelSources" required>
+  Object containing model configuration
+  
+  <Expandable title="properties">
+    <ParamField path="modelName" type="string" required>
+      Built-in model name. Supported values:
+      - `'deeplab-v3-resnet50'`
+      - `'deeplab-v3-resnet101'`
+      - `'deeplab-v3-mobilenet-v3-large'`
+      - `'lraspp-mobilenet-v3-large'`
+      - `'fcn-resnet50'`
+      - `'fcn-resnet101'`
+      - `'selfie-segmentation'`
+      - Quantized variants: `-quantized` suffix
+    </ParamField>
+    
+    <ParamField path="modelSource" type="ResourceSource" required>
+      Source location of the model binary file (.pte)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  If true, prevents automatic model loading and downloading when the hook mounts
+</ParamField>
+
+## Return Value
+
+Returns an object with the following properties and methods:
+
+### State Properties
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the segmentation model is loaded and ready to process images.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether the model is currently processing an image.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if the model fails to load or encounters an error during segmentation.
+</ResponseField>
+
+### Methods
+
+<ResponseField name="forward" type="function">
+  Executes the model's forward pass to perform semantic segmentation.
+  
+  ```typescript
+  forward<K extends keyof L>(
+    imageSource: string,
+    classesOfInterest?: K[],
+    resizeToInput?: boolean
+  ): Promise<Record<'ARGMAX', Int32Array> & Record<K, Float32Array>>
+  ```
+  
+  <Expandable title="parameters">
+    <ParamField path="imageSource" type="string" required>
+      Image source as a file path, URI, or base64 string
+    </ParamField>
+    
+    <ParamField path="classesOfInterest" type="K[]" default="[]">
+      Array of label keys for which to return per-pixel probability masks. If empty, only ARGMAX is returned.
+    </ParamField>
+    
+    <ParamField path="resizeToInput" type="boolean" default="true">
+      If true, output masks are resized to match original image dimensions. If false, returns raw model output size.
+    </ParamField>
+  </Expandable>
+  
+  Returns a promise that resolves to an object containing:
+  - `ARGMAX`: Int32Array of per-pixel class indices
+  - Additional Float32Array probability masks for each requested class
+</ResponseField>
+
+## Label Enums
+
+### DeeplabLabel
+
+Used by DeepLab and FCN models (21 classes):
+
+```typescript
+enum DeeplabLabel {
+  BACKGROUND, AEROPLANE, BICYCLE, BIRD, BOAT, BOTTLE, BUS, CAR,
+  CAT, CHAIR, COW, DININGTABLE, DOG, HORSE, MOTORBIKE, PERSON,
+  POTTEDPLANT, SHEEP, SOFA, TRAIN, TVMONITOR
+}
+```
+
+### SelfieSegmentationLabel
+
+Used by selfie segmentation model (2 classes):
+
+```typescript
+enum SelfieSegmentationLabel {
+  SELFIE,
+  BACKGROUND
+}
+```
+
+## Usage Examples
+
+### Basic Selfie Segmentation
+
+```typescript
+import { useSemanticSegmentation } from 'react-native-executorch';
+import { useState } from 'react';
+import { launchImageLibrary } from 'react-native-image-picker';
+
+function SelfieSegmenter() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [mask, setMask] = useState<Int32Array | null>(null);
+  
+  const segmenter = useSemanticSegmentation({
+    model: {
+      modelName: 'selfie-segmentation',
+      modelSource: 'https://huggingface.co/.../selfie-seg.pte',
+    },
+  });
+  
+  const segmentImage = async (uri: string) => {
+    if (!segmenter.isReady) return;
+    
+    try {
+      const result = await segmenter.forward(uri);
+      setMask(result.ARGMAX);
+      
+      // ARGMAX contains pixel-wise class indices
+      console.log('Mask dimensions:', result.ARGMAX.length);
+    } catch (error) {
+      console.error('Segmentation failed:', error);
+    }
+  };
+  
+  const pickAndSegment = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo' });
+    if (result.assets?.[0]?.uri) {
+      const uri = result.assets[0].uri;
+      setImageUri(uri);
+      await segmentImage(uri);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Status: {segmenter.isReady ? 'Ready' : 'Loading...'}</Text>
+      
+      <Button
+        title="Pick & Segment"
+        onPress={pickAndSegment}
+        disabled={!segmenter.isReady}
+      />
+      
+      {imageUri && (
+        <Image source={{ uri: imageUri }} style={{ width: 400, height: 400 }} />
+      )}
+      
+      {mask && <Text>Segmentation complete: {mask.length} pixels</Text>}
+    </View>
+  );
+}
+```
+
+### Probability Masks for Specific Classes
+
+```typescript
+import { useSemanticSegmentation, DeeplabLabel } from 'react-native-executorch';
+import { useState } from 'react';
+
+function ClassProbabilityMasks() {
+  const [personMask, setPersonMask] = useState<Float32Array | null>(null);
+  const [carMask, setCarMask] = useState<Float32Array | null>(null);
+  
+  const segmenter = useSemanticSegmentation({
+    model: {
+      modelName: 'deeplab-v3-resnet50',
+      modelSource: require('./models/deeplab-v3.pte'),
+    },
+  });
+  
+  const segmentWithProbabilities = async (imageUri: string) => {
+    if (!segmenter.isReady) return;
+    
+    try {
+      // Request probability masks for PERSON and CAR classes
+      const result = await segmenter.forward(
+        imageUri,
+        ['PERSON', 'CAR'],
+        true
+      );
+      
+      setPersonMask(result.PERSON);
+      setCarMask(result.CAR);
+      
+      // result.ARGMAX contains the most likely class for each pixel
+      // result.PERSON contains probability [0-1] for each pixel being a person
+      // result.CAR contains probability [0-1] for each pixel being a car
+      
+      console.log('ARGMAX shape:', result.ARGMAX.length);
+      console.log('PERSON mask shape:', result.PERSON.length);
+      console.log('CAR mask shape:', result.CAR.length);
+    } catch (error) {
+      console.error('Segmentation failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      {personMask && (
+        <Text>
+          Person pixels with {'>'} 50% confidence: 
+          {Array.from(personMask).filter(p => p > 0.5).length}
+        </Text>
+      )}
+      
+      {carMask && (
+        <Text>
+          Car pixels with {'>'} 50% confidence: 
+          {Array.from(carMask).filter(p => p > 0.5).length}
+        </Text>
+      )}
+    </View>
+  );
+}
+```
+
+### Visualizing Segmentation Masks
+
+```typescript
+import { useSemanticSegmentation } from 'react-native-executorch';
+import { useState, useEffect } from 'react';
+import { Canvas, Image as SkiaImage, Skia } from '@shopify/react-native-skia';
+
+function SegmentationVisualizer() {
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [maskImage, setMaskImage] = useState<SkiaImage | null>(null);
+  
+  const segmenter = useSemanticSegmentation({
+    model: {
+      modelName: 'deeplab-v3-mobilenet-v3-large',
+      modelSource: 'https://example.com/deeplab.pte',
+    },
+  });
+  
+  const visualizeMask = async (uri: string, width: number, height: number) => {
+    if (!segmenter.isReady) return;
+    
+    try {
+      const result = await segmenter.forward(uri, [], true);
+      const argmax = result.ARGMAX;
+      
+      // Convert class indices to colors
+      const colorMap = [
+        [0, 0, 0],       // BACKGROUND - black
+        [128, 0, 0],     // AEROPLANE - red
+        [0, 128, 0],     // BICYCLE - green
+        // ... more colors for other classes
+      ];
+      
+      const pixels = new Uint8Array(argmax.length * 4);
+      for (let i = 0; i < argmax.length; i++) {
+        const classIdx = argmax[i];
+        const color = colorMap[classIdx] || [128, 128, 128];
+        pixels[i * 4] = color[0];     // R
+        pixels[i * 4 + 1] = color[1]; // G
+        pixels[i * 4 + 2] = color[2]; // B
+        pixels[i * 4 + 3] = 128;      // A (semi-transparent)
+      }
+      
+      // Create Skia image from pixels
+      const image = Skia.Image.MakeImage(
+        {
+          width,
+          height,
+          alphaType: 1,
+          colorType: 4,
+        },
+        pixels,
+        width * 4
+      );
+      
+      setMaskImage(image);
+    } catch (error) {
+      console.error('Visualization failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      {imageUri && maskImage && (
+        <Canvas style={{ width: 400, height: 400 }}>
+          <SkiaImage
+            image={maskImage}
+            x={0}
+            y={0}
+            width={400}
+            height={400}
+          />
+        </Canvas>
+      )}
+    </View>
+  );
+}
+```
+
+### Background Removal
+
+```typescript
+import { useSemanticSegmentation } from 'react-native-executorch';
+import { useState } from 'react';
+
+function BackgroundRemoval() {
+  const [originalUri, setOriginalUri] = useState<string | null>(null);
+  const [processedUri, setProcessedUri] = useState<string | null>(null);
+  
+  const segmenter = useSemanticSegmentation({
+    model: {
+      modelName: 'selfie-segmentation',
+      modelSource: require('./models/selfie-seg.pte'),
+    },
+  });
+  
+  const removeBackground = async (imageUri: string) => {
+    if (!segmenter.isReady) return;
+    
+    try {
+      // Get segmentation mask
+      const result = await segmenter.forward(imageUri, ['SELFIE'], true);
+      const selfieMask = result.SELFIE;
+      
+      // Load original image
+      const imageData = await loadImageData(imageUri);
+      
+      // Apply mask to remove background
+      for (let i = 0; i < selfieMask.length; i++) {
+        const probability = selfieMask[i];
+        if (probability < 0.5) {
+          // Set pixel to transparent
+          imageData[i * 4 + 3] = 0;
+        }
+      }
+      
+      // Save processed image
+      const processed = await saveImageData(imageData);
+      setProcessedUri(processed);
+    } catch (error) {
+      console.error('Background removal failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      {originalUri && (
+        <Image source={{ uri: originalUri }} style={{ width: 300, height: 300 }} />
+      )}
+      
+      {processedUri && (
+        <Image source={{ uri: processedUri }} style={{ width: 300, height: 300 }} />
+      )}
+    </View>
+  );
+}
+```
+
+### Multi-class Statistics
+
+```typescript
+import { useSemanticSegmentation, DeeplabLabel } from 'react-native-executorch';
+import { useState } from 'react';
+
+function SegmentationStats() {
+  const [stats, setStats] = useState<Record<string, number>>({});
+  
+  const segmenter = useSemanticSegmentation({
+    model: {
+      modelName: 'fcn-resnet50',
+      modelSource: 'https://example.com/fcn.pte',
+    },
+  });
+  
+  const analyzeImage = async (imageUri: string) => {
+    if (!segmenter.isReady) return;
+    
+    try {
+      const result = await segmenter.forward(imageUri);
+      const argmax = result.ARGMAX;
+      
+      // Count pixels for each class
+      const counts: Record<string, number> = {};
+      const labelNames = Object.keys(DeeplabLabel).filter(k => isNaN(Number(k)));
+      
+      for (let i = 0; i < argmax.length; i++) {
+        const classIdx = argmax[i];
+        const className = labelNames[classIdx];
+        counts[className] = (counts[className] || 0) + 1;
+      }
+      
+      // Calculate percentages
+      const total = argmax.length;
+      const percentages: Record<string, number> = {};
+      Object.entries(counts).forEach(([label, count]) => {
+        percentages[label] = (count / total) * 100;
+      });
+      
+      setStats(percentages);
+    } catch (error) {
+      console.error('Analysis failed:', error);
+    }
+  };
+  
+  return (
+    <View>
+      <Text>Class Distribution:</Text>
+      {Object.entries(stats)
+        .filter(([, pct]) => pct > 1) // Only show classes with >1% coverage
+        .sort(([, a], [, b]) => b - a)
+        .map(([label, pct]) => (
+          <Text key={label}>
+            {label}: {pct.toFixed(1)}%
+          </Text>
+        ))}
+    </View>
+  );
+}
+```
+
+## Notes
+
+<Info>
+  The model automatically loads when the hook mounts unless `preventLoad` is set to true.
+</Info>
+
+<Warning>
+  Segmentation output can be large (width × height pixels). Consider processing results efficiently or downsampling if needed.
+</Warning>
+
+<Tip>
+  Use `classesOfInterest` parameter to request probability masks only for the classes you need, reducing memory usage and processing time.
+</Tip>
+
+## Model Comparison
+
+- **DeepLab-v3**: High accuracy, slower (ResNet backbones)
+- **FCN**: Good balance of speed and accuracy
+- **LRASPP**: Faster, lightweight (MobileNet backbone)
+- **Selfie Segmentation**: Optimized for portrait/selfie images
+- **Quantized variants**: Faster inference with minimal accuracy loss
+
+## See Also
+
+- [useObjectDetection](/api/hooks/use-object-detection) - Object detection
+- [useClassification](/api/hooks/use-classification) - Image classification
+- [Computer Vision Guide](/computer-vision/semantic-segmentation) - Segmentation guide

@@ -1,0 +1,372 @@
+---
+title: Speech to Text
+description: Convert audio to text using on-device Whisper models
+---
+
+The `useSpeechToText` hook provides on-device speech recognition powered by Whisper models. It supports both single-pass transcription and real-time streaming with word-level timestamps.
+
+## Basic Usage
+
+```typescript
+import { useSpeechToText } from 'react-native-executorch';
+
+function VoiceRecorder() {
+  const { transcribe, isReady, error } = useSpeechToText({
+    model: {
+      isMultilingual: false,
+      encoderSource: require('./models/whisper-encoder.pte'),
+      decoderSource: require('./models/whisper-decoder.pte'),
+      tokenizerSource: require('./models/tokenizer.json'),
+    },
+  });
+
+  const handleTranscribe = async (audioBuffer: Float32Array) => {
+    if (!isReady) return;
+
+    const result = await transcribe(audioBuffer, {
+      language: 'en',
+      verbose: true,
+    });
+
+    console.log('Transcription:', result.text);
+    console.log('Language:', result.language);
+    console.log('Duration:', result.duration);
+  };
+
+  return (
+    <View>
+      {error && <Text>Error: {error.message}</Text>}
+      {isReady ? (
+        <Button onPress={handleTranscribe} title="Transcribe" />
+      ) : (
+        <Text>Loading model...</Text>
+      )}
+    </View>
+  );
+}
+```
+
+## Hook Signature
+
+### useSpeechToText(props)
+
+```typescript
+function useSpeechToText(props: SpeechToTextProps): SpeechToTextType;
+```
+
+#### Parameters
+
+<ParamField path="model" type="SpeechToTextModelConfig" required>
+  Configuration object containing model sources.
+  
+  <Expandable title="properties">
+    <ParamField path="isMultilingual" type="boolean" required>
+      Whether the model supports multiple languages. Set to `false` for whisper.en models (English-only), `true` for multilingual whisper models.
+    </ParamField>
+    
+    <ParamField path="encoderSource" type="ResourceSource" required>
+      Location of the encoder .pte file. Can be a URL (string), local file (require), or resource ID (number).
+    </ParamField>
+    
+    <ParamField path="decoderSource" type="ResourceSource" required>
+      Location of the decoder .pte file. Can be a URL (string), local file (require), or resource ID (number).
+    </ParamField>
+    
+    <ParamField path="tokenizerSource" type="ResourceSource" required>
+      Location of the tokenizer JSON file. Can be a URL (string), local file (require), or resource ID (number).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading on mount. Useful for lazy loading scenarios.
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Contains error details if model loading or inference fails.
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Indicates whether the model has loaded successfully and is ready for transcription.
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Indicates whether a transcription is currently in progress.
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Download progress as a value between 0 and 1.
+</ResponseField>
+
+<ResponseField name="transcribe" type="(waveform: Float32Array, options?: DecodingOptions) => Promise<TranscriptionResult>">
+  Transcribe audio in a single pass. Accepts a 16kHz mono audio waveform and optional decoding options.
+</ResponseField>
+
+<ResponseField name="stream" type="(options?: DecodingOptions) => AsyncGenerator<StreamResult>">
+  Start a streaming transcription session. Returns an async generator yielding committed and non-committed results.
+</ResponseField>
+
+<ResponseField name="streamInsert" type="(waveform: Float32Array) => void">
+  Insert audio chunks into the active streaming session. Audio must be 16kHz mono.
+</ResponseField>
+
+<ResponseField name="streamStop" type="() => void">
+  Stop the current streaming session and finalize transcription.
+</ResponseField>
+
+<ResponseField name="encode" type="(waveform: Float32Array) => Promise<Float32Array>">
+  Run only the encoder on the audio waveform. Advanced usage for custom decoding.
+</ResponseField>
+
+<ResponseField name="decode" type="(tokens: Int32Array, encoderOutput: Float32Array) => Promise<Float32Array>">
+  Run only the decoder. Advanced usage for custom decoding strategies.
+</ResponseField>
+
+## Transcription Methods
+
+### Single-Pass Transcription
+
+Transcribe complete audio files or recordings:
+
+```typescript
+const { transcribe, isReady } = useSpeechToText({ model });
+
+const result = await transcribe(audioBuffer, {
+  language: 'en',
+  verbose: true,
+});
+
+console.log(result.text); // Full transcription text
+console.log(result.duration); // Audio duration in seconds
+console.log(result.language); // Detected/specified language
+```
+
+### Streaming Transcription
+
+For real-time transcription with live audio:
+
+```typescript
+const { stream, streamInsert, streamStop, isReady } = useSpeechToText({ model });
+
+const startStreaming = async () => {
+  // Start the stream
+  const generator = stream({ language: 'en' });
+
+  // Process results as they arrive
+  for await (const result of generator) {
+    console.log('Committed:', result.committed.text);
+    console.log('Non-committed:', result.nonCommitted.text);
+  }
+};
+
+// Feed audio chunks (16kHz mono)
+streamInsert(audioChunk1);
+streamInsert(audioChunk2);
+streamInsert(audioChunk3);
+
+// Stop and finalize
+streamStop();
+```
+
+## Types
+
+### DecodingOptions
+
+Options for controlling transcription behavior:
+
+```typescript
+interface DecodingOptions {
+  language?: SpeechToTextLanguage; // 'en', 'es', 'fr', etc.
+  verbose?: boolean; // Include segments and timestamps
+}
+```
+
+### TranscriptionResult
+
+The result object returned from transcription:
+
+```typescript
+interface TranscriptionResult {
+  task?: 'transcribe' | 'stream';
+  language: string; // Language code (e.g., 'en')
+  duration: number; // Audio duration in seconds
+  text: string; // Complete transcription text
+  segments?: TranscriptionSegment[]; // Present when verbose=true
+}
+```
+
+### TranscriptionSegment
+
+Detailed segment information (when `verbose: true`):
+
+```typescript
+interface TranscriptionSegment {
+  start: number; // Start time in seconds
+  end: number; // End time in seconds
+  text: string; // Segment text
+  words?: Word[]; // Word-level timestamps
+  tokens: number[]; // Raw token IDs
+  temperature: number; // Generation temperature
+  avgLogprob: number; // Average log probability
+  compressionRatio: number; // Compression ratio
+}
+```
+
+### Word
+
+Word-level timestamp information:
+
+```typescript
+interface Word {
+  word: string; // The word text
+  start: number; // Start time in seconds
+  end: number; // End time in seconds
+}
+```
+
+## Supported Languages
+
+For multilingual models (`isMultilingual: true`), you can specify any of these language codes:
+
+`af`, `sq`, `ar`, `hy`, `az`, `eu`, `be`, `bn`, `bs`, `bg`, `my`, `ca`, `zh`, `hr`, `cs`, `da`, `nl`, `et`, `en`, `fi`, `fr`, `gl`, `ka`, `de`, `el`, `gu`, `ht`, `he`, `hi`, `hu`, `is`, `id`, `it`, `ja`, `kn`, `kk`, `km`, `ko`, `lo`, `lv`, `lt`, `mk`, `mg`, `ms`, `ml`, `mt`, `mr`, `ne`, `no`, `fa`, `pl`, `pt`, `pa`, `ro`, `ru`, `sr`, `si`, `sk`, `sl`, `es`, `su`, `sw`, `sv`, `tl`, `tg`, `ta`, `te`, `th`, `tr`, `uk`, `ur`, `uz`, `vi`, `cy`, `yi`
+
+For English-only models (`isMultilingual: false`), only `'en'` is supported.
+
+## Audio Format Requirements
+
+<Warning>
+  All audio input must be in the correct format or transcription will fail.
+</Warning>
+
+- **Sample rate**: 16kHz (16,000 samples per second)
+- **Channels**: Mono (single channel)
+- **Data type**: Float32Array
+- **Value range**: -1.0 to 1.0 (normalized)
+- **Buffer layout**: Contiguous samples in time order
+
+### Converting Audio
+
+Example of converting typical audio to the required format:
+
+```typescript
+function convertAudioTo16kHz(audioBuffer: AudioBuffer): Float32Array {
+  // Resample to 16kHz if needed
+  const targetSampleRate = 16000;
+  const resampledBuffer = resampleAudio(audioBuffer, targetSampleRate);
+
+  // Convert to mono if stereo
+  const channelData = resampledBuffer.getChannelData(0);
+
+  // Normalize to [-1.0, 1.0]
+  const normalized = new Float32Array(channelData.length);
+  for (let i = 0; i < channelData.length; i++) {
+    normalized[i] = Math.max(-1, Math.min(1, channelData[i]));
+  }
+
+  return normalized;
+}
+```
+
+## Advanced Usage
+
+### Verbose Mode with Timestamps
+
+Get detailed segment and word-level timing:
+
+```typescript
+const result = await transcribe(audioBuffer, {
+  language: 'en',
+  verbose: true,
+});
+
+result.segments?.forEach((segment) => {
+  console.log(`[${segment.start}s - ${segment.end}s]: ${segment.text}`);
+  
+  segment.words?.forEach((word) => {
+    console.log(`  ${word.word} (${word.start}s - ${word.end}s)`);
+  });
+});
+```
+
+### Custom Encoding and Decoding
+
+For advanced use cases where you need control over the encoding and decoding process:
+
+```typescript
+const { encode, decode } = useSpeechToText({ model });
+
+// Encode audio to features
+const encoderOutput = await encode(audioBuffer);
+
+// Use custom token sequence
+const tokens = new Int32Array([50258, 50259, 50359, /* ... */]);
+
+// Decode with custom tokens
+const logits = await decode(tokens, encoderOutput);
+```
+
+### Streaming with Real-Time Display
+
+```typescript
+function LiveTranscription() {
+  const [committed, setCommitted] = useState('');
+  const [tentative, setTentative] = useState('');
+  const { stream, streamInsert, streamStop } = useSpeechToText({ model });
+
+  const startLiveTranscription = async () => {
+    const generator = stream({ language: 'en' });
+
+    for await (const result of generator) {
+      setCommitted(result.committed.text);
+      setTentative(result.nonCommitted.text);
+    }
+  };
+
+  return (
+    <View>
+      <Text style={{ fontWeight: 'bold' }}>{committed}</Text>
+      <Text style={{ opacity: 0.6 }}>{tentative}</Text>
+    </View>
+  );
+}
+```
+
+## Error Handling
+
+```typescript
+const { transcribe, error } = useSpeechToText({ model });
+
+try {
+  const result = await transcribe(audioBuffer);
+} catch (err) {
+  if (err.code === 'MODULE_NOT_LOADED') {
+    console.error('Model not ready yet');
+  } else if (err.code === 'MODEL_GENERATING') {
+    console.error('Already processing audio');
+  } else {
+    console.error('Transcription failed:', err.message);
+  }
+}
+```
+
+## Best Practices
+
+1. **Audio Quality**: Use clean, clear audio for best results. Remove background noise when possible.
+
+2. **Chunk Size**: For streaming, send audio chunks of 1-3 seconds for optimal latency and accuracy.
+
+3. **Language Specification**: Always specify the language when known to improve accuracy and speed.
+
+4. **Verbose Mode**: Use `verbose: true` only when you need timestamps to reduce processing overhead.
+
+5. **Memory Management**: Clear large audio buffers after transcription to free memory.
+
+6. **Model Selection**: Use whisper.en (English-only) for better performance when only English is needed.
+
+## Related
+
+- [Voice Activity Detection](/speech/voice-activity-detection) - Detect speech segments before transcription
+- [Text to Speech](/speech/text-to-speech) - Convert transcribed text back to speech
+- [Speech Overview](/speech/overview) - Complete guide to speech features

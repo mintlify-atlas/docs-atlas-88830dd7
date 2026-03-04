@@ -1,0 +1,295 @@
+---
+title: 'OCRModule'
+description: 'Class-based API for Optical Character Recognition tasks'
+icon: 'text'
+---
+
+## Overview
+
+`OCRModule` provides a class-based interface for Optical Character Recognition (OCR) tasks. It uses a two-stage architecture with a detector and recognizer to extract text from images.
+
+## When to Use
+
+**Use `OCRModule` when:**
+- You need manual control over OCR lifecycle
+- You're working outside React components
+- You need multiple OCR instances with different languages
+- You want to integrate OCR into non-React code
+
+**Use `useOCR` hook when:**
+- Building React components
+- You want automatic lifecycle management
+- You prefer declarative state management
+- You need React state integration
+
+## Constructor
+
+```typescript
+new OCRModule()
+```
+
+Creates a new OCR module instance.
+
+### Example
+
+```typescript
+import { OCRModule } from 'react-native-executorch';
+
+const ocr = new OCRModule();
+```
+
+## Methods
+
+### load()
+
+```typescript
+async load(
+  model: {
+    detectorSource: ResourceSource;
+    recognizerSource: ResourceSource;
+    language: OCRLanguage;
+  },
+  onDownloadProgressCallback?: (progress: number) => void
+): Promise<void>
+```
+
+Loads the OCR detector and recognizer models for the specified language.
+
+#### Parameters
+
+<ParamField path="model.detectorSource" type="ResourceSource" required>
+  Resource location of the text detector model binary.
+</ParamField>
+
+<ParamField path="model.recognizerSource" type="ResourceSource" required>
+  Resource location of the text recognizer model binary.
+</ParamField>
+
+<ParamField path="model.language" type="OCRLanguage" required>
+  Language of the text to be recognized. Supported languages include English, Chinese, Japanese, Korean, and others.
+</ParamField>
+
+<ParamField path="onDownloadProgressCallback" type="(progress: number) => void" optional>
+  Optional callback to monitor download progress (value between 0 and 1).
+</ParamField>
+
+#### Example
+
+```typescript
+await ocr.load(
+  {
+    detectorSource: 'https://example.com/detector.pte',
+    recognizerSource: 'https://example.com/recognizer_en.pte',
+    language: 'en'
+  },
+  (progress) => {
+    console.log(`Download: ${(progress * 100).toFixed(1)}%`);
+  }
+);
+```
+
+### forward()
+
+```typescript
+async forward(imageSource: string): Promise<OCRDetection[]>
+```
+
+Executes OCR on the provided image, detecting and recognizing text.
+
+#### Parameters
+
+<ParamField path="imageSource" type="string" required>
+  The image source to process. Can be:
+  - A file path (e.g., `'/path/to/image.jpg'`)
+  - A URI (e.g., `'file:///path/to/image.jpg'` or `'https://example.com/image.jpg'`)
+  - A Base64-encoded string
+</ParamField>
+
+#### Returns
+
+An array of `OCRDetection` objects, each containing:
+- `text`: The recognized text
+- `confidence`: Recognition confidence score (0-1)
+- `boundingBox`: Coordinates of the text region
+
+#### Example
+
+```typescript
+const detections = await ocr.forward('file:///path/to/document.jpg');
+
+detections.forEach((detection, index) => {
+  console.log(`Text ${index + 1}:`, detection.text);
+  console.log(`  Confidence: ${(detection.confidence * 100).toFixed(1)}%`);
+  console.log(`  Position:`, detection.boundingBox);
+});
+
+// Extract all text
+const fullText = detections.map(d => d.text).join(' ');
+console.log('Full text:', fullText);
+```
+
+### delete()
+
+```typescript
+delete(): void
+```
+
+Releases the memory held by the module. Calling `forward()` afterwards is invalid. Note that you cannot delete the model while it's generating.
+
+#### Example
+
+```typescript
+ocr.delete();
+```
+
+## Supported Languages
+
+The `OCRLanguage` type supports various languages. Common examples:
+
+- `'en'` - English
+- `'ch'` - Chinese (Simplified)
+- `'ja'` - Japanese
+- `'ko'` - Korean
+- `'fr'` - French
+- `'de'` - German
+- `'es'` - Spanish
+
+Refer to the type definition for the complete list of supported languages.
+
+## Complete Example
+
+```typescript
+import { OCRModule } from 'react-native-executorch';
+import RNFS from 'react-native-fs';
+
+class TextExtractor {
+  private ocr: OCRModule;
+  private isReady = false;
+
+  constructor() {
+    this.ocr = new OCRModule();
+  }
+
+  async initialize(language: 'en' | 'ch' | 'ja') {
+    await this.ocr.load(
+      {
+        detectorSource: 'https://example.com/detector.pte',
+        recognizerSource: `https://example.com/recognizer_${language}.pte`,
+        language
+      },
+      (progress) => {
+        console.log(`Loading OCR: ${(progress * 100).toFixed(0)}%`);
+      }
+    );
+    this.isReady = true;
+    console.log('OCR ready!');
+  }
+
+  async extractText(imagePath: string) {
+    if (!this.isReady) {
+      throw new Error('OCR not initialized');
+    }
+
+    const detections = await this.ocr.forward(imagePath);
+    
+    // Sort by vertical position (top to bottom)
+    detections.sort((a, b) => a.boundingBox.y - b.boundingBox.y);
+    
+    return {
+      text: detections.map(d => d.text).join('\n'),
+      detections: detections.map(d => ({
+        text: d.text,
+        confidence: (d.confidence * 100).toFixed(1) + '%',
+        box: d.boundingBox
+      })),
+      averageConfidence: detections.reduce((sum, d) => sum + d.confidence, 0) / detections.length
+    };
+  }
+
+  cleanup() {
+    this.ocr.delete();
+    this.isReady = false;
+  }
+}
+
+// Usage
+const extractor = new TextExtractor();
+await extractor.initialize('en');
+
+const result = await extractor.extractText('/path/to/receipt.jpg');
+console.log('Extracted text:');
+console.log(result.text);
+console.log('\nDetections:', result.detections);
+console.log(`Average confidence: ${(result.averageConfidence * 100).toFixed(1)}%`);
+
+extractor.cleanup();
+```
+
+## Processing Multiple Images
+
+```typescript
+class BatchOCRProcessor {
+  private ocr: OCRModule;
+
+  constructor() {
+    this.ocr = new OCRModule();
+  }
+
+  async initialize() {
+    await this.ocr.load({
+      detectorSource: 'https://example.com/detector.pte',
+      recognizerSource: 'https://example.com/recognizer_en.pte',
+      language: 'en'
+    });
+  }
+
+  async processImages(imagePaths: string[]) {
+    const results = [];
+    
+    for (const path of imagePaths) {
+      console.log(`Processing ${path}...`);
+      const detections = await this.ocr.forward(path);
+      results.push({
+        path,
+        text: detections.map(d => d.text).join(' '),
+        wordCount: detections.length
+      });
+    }
+    
+    return results;
+  }
+
+  cleanup() {
+    this.ocr.delete();
+  }
+}
+
+// Usage
+const processor = new BatchOCRProcessor();
+await processor.initialize();
+
+const images = ['/path/to/page1.jpg', '/path/to/page2.jpg'];
+const results = await processor.processImages(images);
+
+results.forEach(result => {
+  console.log(`${result.path}: ${result.wordCount} words detected`);
+  console.log(result.text);
+});
+
+processor.cleanup();
+```
+
+## Performance Tips
+
+- Load the model once and reuse it for multiple images
+- Choose the appropriate language model for your use case
+- Consider image preprocessing (contrast, rotation) for better accuracy
+- Higher resolution images generally yield better results
+- Always call `delete()` when done to free memory
+
+## See Also
+
+- [useOCR Hook](/api/hooks/use-ocr) - React hook alternative
+- [OCRDetection Type](/api/types/ocr-detection)
+- [OCRLanguage Type](/api/types/ocr-language)
+- [ResourceSource Type](/api/types/resource-source)

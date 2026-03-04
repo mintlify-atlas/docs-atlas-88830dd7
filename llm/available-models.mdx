@@ -1,0 +1,559 @@
+---
+title: Available Models
+description: Browse all supported LLM models and their variants
+---
+
+# Available Models
+
+React Native ExecuTorch provides pre-configured access to a wide range of optimized language models. All models are automatically downloaded on first use.
+
+## Import Models
+
+```tsx
+import {
+  LLAMA3_2_1B,
+  LLAMA3_2_3B,
+  QWEN3_0_6B,
+  // ... other models
+} from 'react-native-executorch/constants';
+```
+
+## Model Families
+
+### Llama 3.2
+
+Meta's Llama 3.2 models, available in 1B and 3B parameter sizes with multiple quantization options.
+
+<AccordionGroup>
+  <Accordion title="LLAMA3_2_1B" icon="cube">
+    **Parameters:** 1 Billion  
+    **Precision:** BF16 (Brain Floating Point 16-bit)  
+    **Size:** ~2GB  
+    **Best for:** Efficient on-device inference, mobile devices
+    
+    ```tsx
+    import { LLAMA3_2_1B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: LLAMA3_2_1B });
+    ```
+  </Accordion>
+  
+  <Accordion title="LLAMA3_2_1B_QLORA" icon="compress">
+    **Parameters:** 1 Billion  
+    **Quantization:** QLoRA (Quantized Low-Rank Adaptation)  
+    **Size:** ~500MB  
+    **Best for:** Memory-constrained devices, faster loading
+    
+    ```tsx
+    import { LLAMA3_2_1B_QLORA } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: LLAMA3_2_1B_QLORA });
+    ```
+  </Accordion>
+  
+  <Accordion title="LLAMA3_2_1B_SPINQUANT" icon="gauge">
+    **Parameters:** 1 Billion  
+    **Quantization:** SpinQuant  
+    **Size:** ~600MB  
+    **Best for:** Balanced performance and size
+    
+    ```tsx
+    import { LLAMA3_2_1B_SPINQUANT } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT });
+    ```
+  </Accordion>
+  
+  <Accordion title="LLAMA3_2_3B" icon="cube">
+    **Parameters:** 3 Billion  
+    **Precision:** BF16  
+    **Size:** ~6GB  
+    **Best for:** Higher quality responses, more capable reasoning
+    
+    ```tsx
+    import { LLAMA3_2_3B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: LLAMA3_2_3B });
+    ```
+  </Accordion>
+  
+  <Accordion title="LLAMA3_2_3B_QLORA" icon="compress">
+    **Parameters:** 3 Billion  
+    **Quantization:** QLoRA  
+    **Size:** ~1.5GB  
+    **Best for:** Mid-range devices, good quality/size balance
+    
+    ```tsx
+    import { LLAMA3_2_3B_QLORA } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: LLAMA3_2_3B_QLORA });
+    ```
+  </Accordion>
+  
+  <Accordion title="LLAMA3_2_3B_SPINQUANT" icon="gauge">
+    **Parameters:** 3 Billion  
+    **Quantization:** SpinQuant  
+    **Size:** ~1.8GB  
+    **Best for:** Better quality than QLoRA with reasonable size
+    
+    ```tsx
+    import { LLAMA3_2_3B_SPINQUANT } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: LLAMA3_2_3B_SPINQUANT });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Qwen 3
+
+Alibaba's Qwen 3 models, available in 0.6B, 1.7B, and 4B sizes.
+
+<AccordionGroup>
+  <Accordion title="QWEN3_0_6B" icon="cube">
+    **Parameters:** 0.6 Billion  
+    **Precision:** BF16  
+    **Size:** ~1.2GB  
+    **Best for:** Very efficient inference, low memory usage
+    
+    ```tsx
+    import { QWEN3_0_6B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN3_0_6B });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN3_0_6B_QUANTIZED" icon="compress">
+    **Parameters:** 0.6 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~400MB  
+    **Best for:** Ultra-lightweight applications
+    
+    ```tsx
+    import { QWEN3_0_6B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN3_0_6B_QUANTIZED });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN3_1_7B" icon="cube">
+    **Parameters:** 1.7 Billion  
+    **Precision:** BF16  
+    **Size:** ~3.4GB  
+    
+    ```tsx
+    import { QWEN3_1_7B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN3_1_7B });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN3_1_7B_QUANTIZED" icon="compress">
+    **Parameters:** 1.7 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~900MB  
+    
+    ```tsx
+    import { QWEN3_1_7B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN3_1_7B_QUANTIZED });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN3_4B" icon="cube">
+    **Parameters:** 4 Billion  
+    **Precision:** BF16  
+    **Size:** ~8GB  
+    **Best for:** High-quality responses, advanced reasoning
+    
+    ```tsx
+    import { QWEN3_4B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN3_4B });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN3_4B_QUANTIZED" icon="compress">
+    **Parameters:** 4 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~2GB  
+    
+    ```tsx
+    import { QWEN3_4B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN3_4B_QUANTIZED });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Qwen 2.5
+
+Updated Qwen models with improved performance.
+
+<AccordionGroup>
+  <Accordion title="QWEN2_5_0_5B" icon="cube">
+    **Parameters:** 0.5 Billion  
+    **Precision:** BF16  
+    **Size:** ~1GB  
+    
+    ```tsx
+    import { QWEN2_5_0_5B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN2_5_0_5B });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN2_5_0_5B_QUANTIZED" icon="compress">
+    **Parameters:** 0.5 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~300MB  
+    
+    ```tsx
+    import { QWEN2_5_0_5B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN2_5_0_5B_QUANTIZED });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN2_5_1_5B" icon="cube">
+    **Parameters:** 1.5 Billion  
+    **Precision:** BF16  
+    **Size:** ~3GB  
+    
+    ```tsx
+    import { QWEN2_5_1_5B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN2_5_1_5B });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN2_5_1_5B_QUANTIZED" icon="compress">
+    **Parameters:** 1.5 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~800MB  
+    
+    ```tsx
+    import { QWEN2_5_1_5B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN2_5_1_5B_QUANTIZED });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN2_5_3B" icon="cube">
+    **Parameters:** 3 Billion  
+    **Precision:** BF16  
+    **Size:** ~6GB  
+    
+    ```tsx
+    import { QWEN2_5_3B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN2_5_3B });
+    ```
+  </Accordion>
+  
+  <Accordion title="QWEN2_5_3B_QUANTIZED" icon="compress">
+    **Parameters:** 3 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~1.5GB  
+    
+    ```tsx
+    import { QWEN2_5_3B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: QWEN2_5_3B_QUANTIZED });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Hammer 2.1
+
+Efficient models optimized for mobile inference.
+
+<AccordionGroup>
+  <Accordion title="HAMMER2_1_0_5B" icon="cube">
+    **Parameters:** 0.5 Billion  
+    **Precision:** BF16  
+    **Size:** ~1GB  
+    
+    ```tsx
+    import { HAMMER2_1_0_5B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: HAMMER2_1_0_5B });
+    ```
+  </Accordion>
+  
+  <Accordion title="HAMMER2_1_0_5B_QUANTIZED" icon="compress">
+    **Parameters:** 0.5 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~300MB  
+    
+    ```tsx
+    import { HAMMER2_1_0_5B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: HAMMER2_1_0_5B_QUANTIZED });
+    ```
+  </Accordion>
+  
+  <Accordion title="HAMMER2_1_1_5B" icon="cube">
+    **Parameters:** 1.5 Billion  
+    **Precision:** BF16  
+    **Size:** ~3GB  
+    
+    ```tsx
+    import { HAMMER2_1_1_5B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: HAMMER2_1_1_5B });
+    ```
+  </Accordion>
+  
+  <Accordion title="HAMMER2_1_1_5B_QUANTIZED" icon="compress">
+    **Parameters:** 1.5 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~800MB  
+    
+    ```tsx
+    import { HAMMER2_1_1_5B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: HAMMER2_1_1_5B_QUANTIZED });
+    ```
+  </Accordion>
+  
+  <Accordion title="HAMMER2_1_3B" icon="cube">
+    **Parameters:** 3 Billion  
+    **Precision:** BF16  
+    **Size:** ~6GB  
+    
+    ```tsx
+    import { HAMMER2_1_3B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: HAMMER2_1_3B });
+    ```
+  </Accordion>
+  
+  <Accordion title="HAMMER2_1_3B_QUANTIZED" icon="compress">
+    **Parameters:** 3 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~1.5GB  
+    
+    ```tsx
+    import { HAMMER2_1_3B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: HAMMER2_1_3B_QUANTIZED });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### SmolLM 2
+
+Compact models from Hugging Face, designed for efficiency.
+
+<AccordionGroup>
+  <Accordion title="SMOLLM2_1_135M" icon="cube">
+    **Parameters:** 135 Million  
+    **Precision:** BF16  
+    **Size:** ~270MB  
+    **Best for:** Ultra-lightweight applications, quick responses
+    
+    ```tsx
+    import { SMOLLM2_1_135M } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: SMOLLM2_1_135M });
+    ```
+  </Accordion>
+  
+  <Accordion title="SMOLLM2_1_135M_QUANTIZED" icon="compress">
+    **Parameters:** 135 Million  
+    **Quantization:** 8da4w  
+    **Size:** ~80MB  
+    
+    ```tsx
+    import { SMOLLM2_1_135M_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: SMOLLM2_1_135M_QUANTIZED });
+    ```
+  </Accordion>
+  
+  <Accordion title="SMOLLM2_1_360M" icon="cube">
+    **Parameters:** 360 Million  
+    **Precision:** BF16  
+    **Size:** ~720MB  
+    
+    ```tsx
+    import { SMOLLM2_1_360M } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: SMOLLM2_1_360M });
+    ```
+  </Accordion>
+  
+  <Accordion title="SMOLLM2_1_360M_QUANTIZED" icon="compress">
+    **Parameters:** 360 Million  
+    **Quantization:** 8da4w  
+    **Size:** ~200MB  
+    
+    ```tsx
+    import { SMOLLM2_1_360M_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: SMOLLM2_1_360M_QUANTIZED });
+    ```
+  </Accordion>
+  
+  <Accordion title="SMOLLM2_1_1_7B" icon="cube">
+    **Parameters:** 1.7 Billion  
+    **Precision:** BF16  
+    **Size:** ~3.4GB  
+    
+    ```tsx
+    import { SMOLLM2_1_1_7B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: SMOLLM2_1_1_7B });
+    ```
+  </Accordion>
+  
+  <Accordion title="SMOLLM2_1_1_7B_QUANTIZED" icon="compress">
+    **Parameters:** 1.7 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~900MB  
+    
+    ```tsx
+    import { SMOLLM2_1_1_7B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: SMOLLM2_1_1_7B_QUANTIZED });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Phi 4 Mini
+
+Microsoft's efficient small language model.
+
+<AccordionGroup>
+  <Accordion title="PHI_4_MINI_4B" icon="cube">
+    **Parameters:** 4 Billion  
+    **Precision:** BF16  
+    **Size:** ~8GB  
+    **Best for:** High-quality reasoning with compact size
+    
+    ```tsx
+    import { PHI_4_MINI_4B } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: PHI_4_MINI_4B });
+    ```
+  </Accordion>
+  
+  <Accordion title="PHI_4_MINI_4B_QUANTIZED" icon="compress">
+    **Parameters:** 4 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~2GB  
+    
+    ```tsx
+    import { PHI_4_MINI_4B_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: PHI_4_MINI_4B_QUANTIZED });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### LFM 2.5
+
+Latest generation efficient models.
+
+<AccordionGroup>
+  <Accordion title="LFM2_5_1_2B_INSTRUCT" icon="cube">
+    **Parameters:** 1.2 Billion  
+    **Precision:** FP16  
+    **Size:** ~2.4GB  
+    **Best for:** Instruction following, chat applications
+    
+    ```tsx
+    import { LFM2_5_1_2B_INSTRUCT } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: LFM2_5_1_2B_INSTRUCT });
+    ```
+  </Accordion>
+  
+  <Accordion title="LFM2_5_1_2B_INSTRUCT_QUANTIZED" icon="compress">
+    **Parameters:** 1.2 Billion  
+    **Quantization:** 8da4w  
+    **Size:** ~650MB  
+    
+    ```tsx
+    import { LFM2_5_1_2B_INSTRUCT_QUANTIZED } from 'react-native-executorch/constants';
+    
+    const llm = useLLM({ model: LFM2_5_1_2B_INSTRUCT_QUANTIZED });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Model Selection Guide
+
+### By Device Capability
+
+**Low-end devices (< 4GB RAM):**
+- `SMOLLM2_1_135M_QUANTIZED` (80MB)
+- `QWEN3_0_6B_QUANTIZED` (400MB)
+- `LLAMA3_2_1B_QLORA` (500MB)
+
+**Mid-range devices (4-6GB RAM):**
+- `LLAMA3_2_1B` (2GB)
+- `QWEN2_5_1_5B_QUANTIZED` (800MB)
+- `HAMMER2_1_1_5B_QUANTIZED` (800MB)
+
+**High-end devices (6GB+ RAM):**
+- `LLAMA3_2_3B` (6GB)
+- `QWEN3_4B` (8GB)
+- `PHI_4_MINI_4B` (8GB)
+
+### By Use Case
+
+**Quick Q&A / Simple chat:**
+- `SMOLLM2_1_360M`
+- `QWEN3_0_6B`
+- `LLAMA3_2_1B`
+
+**Advanced reasoning / Complex tasks:**
+- `LLAMA3_2_3B`
+- `QWEN3_4B`
+- `PHI_4_MINI_4B`
+
+**Tool calling / Function calling:**
+- `LLAMA3_2_3B` (best tool support)
+- `QWEN2_5_3B`
+- `LFM2_5_1_2B_INSTRUCT`
+
+**Fastest inference:**
+- `SMOLLM2_1_135M_QUANTIZED`
+- `QWEN3_0_6B_QUANTIZED`
+- `LLAMA3_2_1B_SPINQUANT`
+
+## Understanding Quantization
+
+- **BF16/FP16**: Full precision, best quality, largest size
+- **QLoRA**: Efficient quantization with good quality retention
+- **SpinQuant**: Balanced quantization method
+- **8da4w**: Aggressive 8-bit quantization, smallest size
+
+Quantized models are typically 3-4x smaller with minimal quality loss.
+
+## Custom Models
+
+You can also use custom models by providing URLs or local paths:
+
+```tsx
+const customModel = {
+  modelSource: { uri: 'https://your-cdn.com/model.pte' },
+  tokenizerSource: { uri: 'https://your-cdn.com/tokenizer.json' },
+  tokenizerConfigSource: { uri: 'https://your-cdn.com/tokenizer_config.json' },
+};
+
+const llm = useLLM({ model: customModel });
+```
+
+Or from local files:
+
+```tsx
+const localModel = {
+  modelSource: require('./assets/model.pte'),
+  tokenizerSource: require('./assets/tokenizer.json'),
+  tokenizerConfigSource: require('./assets/tokenizer_config.json'),
+};
+
+const llm = useLLM({ model: localModel });
+```

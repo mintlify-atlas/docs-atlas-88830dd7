@@ -1,0 +1,767 @@
+---
+title: Text-to-Image Generation
+description: Generate images from text descriptions using diffusion models
+---
+
+Text-to-image generation creates images from natural language descriptions using diffusion models. React Native ExecuTorch provides on-device image generation with progress tracking and interruption support.
+
+## Quick Start
+
+```tsx
+import { useTextToImage, BK_SDM_TINY_VPRED_512 } from 'react-native-executorch';
+
+function ImageGenerator() {
+  const { isReady, generate } = useTextToImage({
+    model: BK_SDM_TINY_VPRED_512,
+    inferenceCallback: (step) => console.log(`Step ${step} complete`),
+  });
+
+  const createImage = async (prompt: string) => {
+    const imageUri = await generate(prompt, 512, 20, 42);
+    // Returns URI of generated image
+  };
+
+  return <Button title="Generate" onPress={() => createImage('a cat on a beach')} />;
+}
+```
+
+## Hook API
+
+### `useTextToImage(props)`
+
+Manages a text-to-image diffusion model pipeline.
+
+#### Parameters
+
+<ParamField path="model" type="object" required>
+  Diffusion model configuration
+  
+  <Expandable title="properties">
+    <ParamField path="tokenizerSource" type="ResourceSource" required>
+      Text tokenizer binary/config source
+    </ParamField>
+    <ParamField path="schedulerSource" type="ResourceSource" required>
+      Diffusion scheduler config source
+    </ParamField>
+    <ParamField path="encoderSource" type="ResourceSource" required>
+      Text encoder model source
+    </ParamField>
+    <ParamField path="unetSource" type="ResourceSource" required>
+      UNet (noise predictor) model source
+    </ParamField>
+    <ParamField path="decoderSource" type="ResourceSource" required>
+      VAE decoder model source
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="inferenceCallback" type="(stepIdx: number) => void">
+  Callback triggered after each diffusion step for progress tracking
+</ParamField>
+
+<ParamField path="preventLoad" type="boolean" default="false">
+  Prevent automatic model loading
+</ParamField>
+
+#### Returns
+
+<ResponseField name="error" type="RnExecutorchError | null">
+  Error object if loading or generation fails
+</ResponseField>
+
+<ResponseField name="isReady" type="boolean">
+  Whether all pipeline components are loaded and ready
+</ResponseField>
+
+<ResponseField name="isGenerating" type="boolean">
+  Whether image generation is in progress
+</ResponseField>
+
+<ResponseField name="downloadProgress" type="number">
+  Combined download progress for all models (0-1)
+</ResponseField>
+
+<ResponseField name="generate" type="(input: string, imageSize?: number, numSteps?: number, seed?: number) => Promise<string>">
+  Generate an image from a text prompt.
+  
+  **Parameters:**
+  - `input`: Text description of the desired image
+  - `imageSize`: Target image dimension (e.g., 512 for 512x512)
+  - `numSteps`: Number of denoising steps (more = higher quality, slower)
+  - `seed`: Random seed for reproducibility
+  
+  **Returns:** URI of the generated image
+</ResponseField>
+
+<ResponseField name="interrupt" type="() => void">
+  Interrupt the current generation process at the next step
+</ResponseField>
+
+## Available Models
+
+### BK_SDM_TINY_VPRED_512
+
+Tiny Stable Diffusion model optimized for 512x512 generation.
+
+```tsx
+import { BK_SDM_TINY_VPRED_512 } from 'react-native-executorch';
+
+const generator = useTextToImage({
+  model: BK_SDM_TINY_VPRED_512,
+  inferenceCallback: (step) => console.log(`Step ${step}`),
+});
+```
+
+**Specifications:**
+- **Output Size**: 512x512 pixels
+- **Default Steps**: 20
+- **Inference Time**: ~30-60 seconds (device-dependent)
+- **Quality**: Good for mobile, lower than full SD models
+- **Memory**: ~1.5GB
+
+### BK_SDM_TINY_VPRED_256
+
+Tiny Stable Diffusion model optimized for 256x256 generation.
+
+```tsx
+import { BK_SDM_TINY_VPRED_256 } from 'react-native-executorch';
+
+const generator = useTextToImage({
+  model: BK_SDM_TINY_VPRED_256,
+  inferenceCallback: (step) => console.log(`Step ${step}`),
+});
+```
+
+**Specifications:**
+- **Output Size**: 256x256 pixels
+- **Default Steps**: 20
+- **Inference Time**: ~15-30 seconds
+- **Quality**: Faster but lower resolution
+- **Memory**: ~1GB
+
+## Complete Example
+
+```tsx
+import React, { useState } from 'react';
+import {
+  View,
+  TextInput,
+  Image,
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
+import { useTextToImage, BK_SDM_TINY_VPRED_512 } from 'react-native-executorch';
+
+function TextToImageDemo() {
+  const [prompt, setPrompt] = useState('');
+  const [generatedUri, setGeneratedUri] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [totalSteps, setTotalSteps] = useState(20);
+
+  const { isReady, isGenerating, error, downloadProgress, generate, interrupt } = useTextToImage({
+    model: BK_SDM_TINY_VPRED_512,
+    inferenceCallback: (stepIdx) => {
+      setProgress(stepIdx);
+      console.log(`Completed step ${stepIdx}/${totalSteps}`);
+    },
+  });
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      alert('Please enter a prompt');
+      return;
+    }
+
+    try {
+      setProgress(0);
+      setGeneratedUri(null);
+      
+      const imageUri = await generate(
+        prompt,
+        512,        // Image size
+        totalSteps, // Denoising steps
+        Date.now()  // Random seed
+      );
+      
+      setGeneratedUri(imageUri);
+    } catch (err) {
+      console.error('Generation failed:', err);
+      alert('Failed to generate image');
+    }
+  };
+
+  const handleInterrupt = () => {
+    interrupt();
+    alert('Generation interrupted');
+  };
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>Error: {error.message}</Text>
+      </View>
+    );
+  }
+
+  if (!isReady) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>Loading diffusion models...</Text>
+        <Text style={styles.progressText}>
+          {(downloadProgress * 100).toFixed(0)}%
+        </Text>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Text-to-Image Generator</Text>
+
+      <TextInput
+        style={styles.input}
+        placeholder="Enter a description (e.g., 'a cat on a beach')..."
+        value={prompt}
+        onChangeText={setPrompt}
+        multiline
+        editable={!isGenerating}
+      />
+
+      <View style={styles.controls}>
+        <Text style={styles.label}>Denoising Steps: {totalSteps}</Text>
+        <View style={styles.stepButtons}>
+          {[10, 20, 30, 50].map(steps => (
+            <TouchableOpacity
+              key={steps}
+              style={[
+                styles.stepButton,
+                totalSteps === steps && styles.stepButtonActive,
+              ]}
+              onPress={() => setTotalSteps(steps)}
+              disabled={isGenerating}
+            >
+              <Text
+                style={[
+                  styles.stepButtonText,
+                  totalSteps === steps && styles.stepButtonTextActive,
+                ]}
+              >
+                {steps}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.button, isGenerating && styles.buttonDisabled]}
+        onPress={handleGenerate}
+        disabled={isGenerating}
+      >
+        <Text style={styles.buttonText}>
+          {isGenerating ? 'Generating...' : 'Generate Image'}
+        </Text>
+      </TouchableOpacity>
+
+      {isGenerating && (
+        <>
+          <View style={styles.progressContainer}>
+            <Text style={styles.progressText}>
+              Step {progress + 1} / {totalSteps}
+            </Text>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${((progress + 1) / totalSteps) * 100}%` },
+                ]}
+              />
+            </View>
+          </View>
+          
+          <TouchableOpacity style={styles.interruptButton} onPress={handleInterrupt}>
+            <Text style={styles.interruptButtonText}>Stop Generation</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
+      {generatedUri && (
+        <View style={styles.result}>
+          <Text style={styles.resultTitle}>Generated Image:</Text>
+          <Image source={{ uri: generatedUri }} style={styles.generatedImage} />
+          <Text style={styles.promptDisplay}>Prompt: "{prompt}"</Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: 20,
+  },
+  controls: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  stepButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  stepButton: {
+    flex: 1,
+    padding: 10,
+    marginHorizontal: 5,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+  },
+  stepButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  stepButtonText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  stepButtonTextActive: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  button: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  progressContainer: {
+    marginBottom: 20,
+  },
+  progressText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+  },
+  interruptButton: {
+    backgroundColor: '#FF3B30',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  interruptButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  result: {
+    marginTop: 20,
+  },
+  resultTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  generatedImage: {
+    width: '100%',
+    height: 300,
+    borderRadius: 8,
+    resizeMode: 'contain',
+    marginBottom: 10,
+  },
+  promptDisplay: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  loadingText: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  error: {
+    color: 'red',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+});
+
+export default TextToImageDemo;
+```
+
+## Use Cases
+
+### AI Art Generator
+
+Create artistic images from descriptions:
+
+```tsx
+const generateArt = async (style: string, subject: string) => {
+  const prompt = `${subject} in the style of ${style}, highly detailed, digital art`;
+  
+  const imageUri = await generate(
+    prompt,
+    512,
+    30, // More steps for better quality
+    42  // Fixed seed for consistency
+  );
+  
+  return imageUri;
+};
+
+// Usage
+const artwork = await generateArt('Van Gogh', 'starry night over city');
+```
+
+### Product Visualization
+
+Visualize products before creation:
+
+```tsx
+const visualizeProduct = async (description: string) => {
+  const prompt = `product photography of ${description}, white background, professional lighting, high quality`;
+  
+  return await generate(prompt, 512, 25);
+};
+
+// Usage
+const mockup = await visualizeProduct('red leather wallet with gold zipper');
+```
+
+### Concept Sketching
+
+Generate concept sketches:
+
+```tsx
+const generateConcept = async (idea: string) => {
+  const prompt = `concept art of ${idea}, sketch, detailed, professional`;
+  
+  return await generate(prompt, 512, 20);
+};
+```
+
+### Story Illustration
+
+Generate illustrations for stories:
+
+```tsx
+const illustrateScene = async (sceneDescription: string) => {
+  const prompt = `illustration of ${sceneDescription}, storybook art, colorful, detailed`;
+  
+  return await generate(prompt, 512, 25);
+};
+```
+
+## Prompt Engineering
+
+### Effective Prompts
+
+Craft prompts for better results:
+
+```tsx
+const createDetailedPrompt = ({
+  subject,
+  style,
+  quality,
+  lighting,
+  mood,
+}: {
+  subject: string;
+  style?: string;
+  quality?: string;
+  lighting?: string;
+  mood?: string;
+}) => {
+  const parts = [subject];
+  
+  if (style) parts.push(`in ${style} style`);
+  if (lighting) parts.push(lighting);
+  if (mood) parts.push(mood);
+  if (quality) parts.push(quality);
+  
+  return parts.join(', ');
+};
+
+// Usage
+const prompt = createDetailedPrompt({
+  subject: 'a mountain landscape',
+  style: 'watercolor',
+  lighting: 'golden hour',
+  mood: 'peaceful',
+  quality: 'highly detailed',
+});
+// "a mountain landscape, in watercolor style, golden hour, peaceful, highly detailed"
+```
+
+### Negative Prompts
+
+While the current API doesn't support negative prompts directly, you can:
+
+```tsx
+const avoidUnwantedElements = (prompt: string) => {
+  // Add qualifiers to the prompt
+  return `${prompt}, high quality, professional, detailed`;
+};
+```
+
+## Generation Parameters
+
+### Image Size
+
+Choose appropriate size for your use case:
+
+```tsx
+// Fast generation
+const quickPreview = await generate(prompt, 256, 10);
+
+// Standard quality
+const standard = await generate(prompt, 512, 20);
+
+// Higher quality (if model supports)
+const hq = await generate(prompt, 512, 50);
+```
+
+### Denoising Steps
+
+Balance quality vs. speed:
+
+- **10 steps**: Fast preview (~10-15 seconds)
+- **20 steps**: Good balance (~30 seconds)
+- **30 steps**: Better quality (~45 seconds)
+- **50 steps**: Best quality (~75 seconds)
+
+### Reproducibility
+
+Use seeds for consistent results:
+
+```tsx
+const seed = 42;
+
+// Generate same image multiple times
+const image1 = await generate(prompt, 512, 20, seed);
+const image2 = await generate(prompt, 512, 20, seed);
+// image1 and image2 will be identical
+
+// Generate variations
+const variation1 = await generate(prompt, 512, 20, seed + 1);
+const variation2 = await generate(prompt, 512, 20, seed + 2);
+```
+
+## Progress Tracking
+
+Monitor generation progress:
+
+```tsx
+function GeneratorWithProgress() {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [totalSteps] = useState(20);
+  
+  const { generate } = useTextToImage({
+    model: BK_SDM_TINY_VPRED_512,
+    inferenceCallback: (step) => {
+      setCurrentStep(step);
+      // Update UI, send analytics, etc.
+    },
+  });
+  
+  const progressPercentage = ((currentStep + 1) / totalSteps) * 100;
+  
+  return (
+    <View>
+      <ProgressBar progress={progressPercentage} />
+      <Text>{currentStep + 1} / {totalSteps} steps</Text>
+    </View>
+  );
+}
+```
+
+## Interrupting Generation
+
+Stop generation gracefully:
+
+```tsx
+function InterruptibleGenerator() {
+  const { generate, interrupt, isGenerating } = useTextToImage({
+    model: BK_SDM_TINY_VPRED_512,
+  });
+  
+  const handleGenerate = async (prompt: string) => {
+    try {
+      const result = await generate(prompt, 512, 30);
+      console.log('Generated:', result);
+    } catch (err) {
+      if (err.message.includes('interrupt')) {
+        console.log('Generation interrupted by user');
+      } else {
+        console.error('Generation failed:', err);
+      }
+    }
+  };
+  
+  return (
+    <View>
+      <Button title="Generate" onPress={() => handleGenerate(prompt)} />
+      {isGenerating && (
+        <Button title="Stop" onPress={interrupt} />
+      )}
+    </View>
+  );
+}
+```
+
+## Saving Generated Images
+
+```tsx
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
+
+const saveToGallery = async (imageUri: string) => {
+  const { status } = await MediaLibrary.requestPermissionsAsync();
+  
+  if (status !== 'granted') {
+    alert('Permission denied');
+    return;
+  }
+  
+  if (imageUri.startsWith('data:')) {
+    // Convert base64 to file
+    const filename = `generated_${Date.now()}.jpg`;
+    const filepath = `${FileSystem.cacheDirectory}${filename}`;
+    
+    await FileSystem.writeAsStringAsync(
+      filepath,
+      imageUri.split(',')[1],
+      { encoding: FileSystem.EncodingType.Base64 }
+    );
+    
+    await MediaLibrary.saveToLibraryAsync(filepath);
+  } else {
+    await MediaLibrary.saveToLibraryAsync(imageUri);
+  }
+  
+  alert('Saved to gallery!');
+};
+```
+
+## Performance Tips
+
+### Memory Management
+
+- Text-to-image models are memory-intensive (~1-2GB)
+- Close other apps during generation
+- Test on target devices to ensure sufficient memory
+
+### Generation Speed
+
+- Use 256x256 model for faster results
+- Reduce denoising steps for previews
+- Consider showing progress to keep users engaged
+
+### Battery Optimization
+
+```tsx
+const handleGenerate = async (prompt: string) => {
+  // Warn user about battery usage
+  if (batteryLevel < 0.2) {
+    Alert.alert(
+      'Low Battery',
+      'Image generation uses significant battery. Continue?',
+      [
+        { text: 'Cancel' },
+        { text: 'Continue', onPress: () => generate(prompt) },
+      ]
+    );
+  } else {
+    await generate(prompt);
+  }
+};
+```
+
+## Type Reference
+
+```typescript
+import { ResourceSource } from 'react-native-executorch';
+
+interface TextToImageProps {
+  model: {
+    tokenizerSource: ResourceSource;
+    schedulerSource: ResourceSource;
+    encoderSource: ResourceSource;
+    unetSource: ResourceSource;
+    decoderSource: ResourceSource;
+  };
+  inferenceCallback?: (stepIdx: number) => void;
+  preventLoad?: boolean;
+}
+
+interface TextToImageType {
+  error: RnExecutorchError | null;
+  isReady: boolean;
+  isGenerating: boolean;
+  downloadProgress: number;
+  generate: (
+    input: string,
+    imageSize?: number,
+    numSteps?: number,
+    seed?: number
+  ) => Promise<string>;
+  interrupt: () => void;
+}
+```
+
+## Limitations
+
+- **Model Quality**: Mobile models are smaller than cloud-based alternatives
+- **Generation Time**: 30-60 seconds per image on modern devices
+- **Memory Requirements**: Requires 1-2GB RAM minimum
+- **Resolution**: Currently limited to 512x512 or 256x256
+- **Prompt Understanding**: May not understand complex or abstract prompts as well as larger models
+
+## Related
+
+- [Style Transfer](/computer-vision/style-transfer) - Apply artistic styles
+- [Image Embeddings](/computer-vision/image-embeddings) - Visual feature extraction
+- [Custom Models](/advanced/custom-models) - Use custom diffusion models

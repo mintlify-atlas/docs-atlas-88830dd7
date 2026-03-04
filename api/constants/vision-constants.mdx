@@ -1,0 +1,173 @@
+---
+title: 'Vision Constants'
+description: 'Constants for Computer Vision models'
+---
+
+## ImageNet Normalization
+
+### IMAGENET1K_MEAN
+
+Per-channel mean values for ImageNet1K normalization.
+
+```typescript
+export const IMAGENET1K_MEAN: Triple<number> = [0.485, 0.456, 0.406];
+```
+
+These values represent the mean RGB values calculated across the ImageNet1K dataset:
+- **R (Red)**: 0.485
+- **G (Green)**: 0.456
+- **B (Blue)**: 0.406
+
+Used for normalizing input images during preprocessing for models trained on ImageNet.
+
+### IMAGENET1K_STD
+
+Per-channel standard deviation values for ImageNet1K normalization.
+
+```typescript
+export const IMAGENET1K_STD: Triple<number> = [0.229, 0.224, 0.225];
+```
+
+These values represent the standard deviation RGB values calculated across the ImageNet1K dataset:
+- **R (Red)**: 0.229
+- **G (Green)**: 0.224
+- **B (Blue)**: 0.225
+
+Used in conjunction with `IMAGENET1K_MEAN` for normalizing input images.
+
+### Usage Example
+
+```typescript
+import { IMAGENET1K_MEAN, IMAGENET1K_STD } from 'react-native-executorch';
+
+const preprocessorConfig = {
+  normMean: IMAGENET1K_MEAN,
+  normStd: IMAGENET1K_STD,
+};
+```
+
+## COCO Dataset Labels
+
+### CocoLabel
+
+COCO dataset class labels used for object detection.
+
+```typescript
+enum CocoLabel {
+  PERSON = 1,
+  BICYCLE = 2,
+  CAR = 3,
+  MOTORCYCLE = 4,
+  AIRPLANE = 5,
+  BUS = 6,
+  TRAIN = 7,
+  TRUCK = 8,
+  BOAT = 9,
+  TRAFFIC_LIGHT = 10,
+  FIRE_HYDRANT = 11,
+  STREET_SIGN = 12,
+  STOP_SIGN = 13,
+  PARKING = 14,
+  BENCH = 15,
+  BIRD = 16,
+  CAT = 17,
+  DOG = 18,
+  HORSE = 19,
+  SHEEP = 20,
+  COW = 21,
+  ELEPHANT = 22,
+  BEAR = 23,
+  ZEBRA = 24,
+  GIRAFFE = 25,
+  HAT = 26,
+  BACKPACK = 27,
+  UMBRELLA = 28,
+  SHOE = 29,
+  EYE = 30,
+  HANDBAG = 31,
+  TIE = 32,
+  SUITCASE = 33,
+  FRISBEE = 34,
+  SKIS = 35,
+  SNOWBOARD = 36,
+  SPORTS = 37,
+  KITE = 38,
+  BASEBALL = 39,
+  SKATEBOARD = 41,
+  SURFBOARD = 42,
+  TENNIS_RACKET = 43,
+  BOTTLE = 44,
+  PLATE = 45,
+  WINE_GLASS = 46,
+  CUP = 47,
+  FORK = 48,
+  KNIFE = 49,
+  SPOON = 50,
+  BOWL = 51,
+  BANANA = 52,
+  APPLE = 53,
+  SANDWICH = 54,
+  ORANGE = 55,
+  BROCCOLI = 56,
+  CARROT = 57,
+  HOT_DOG = 58,
+  PIZZA = 59,
+  DONUT = 60,
+  CAKE = 61,
+  CHAIR = 62,
+  COUCH = 63,
+  POTTED_PLANT = 64,
+  BED = 65,
+  MIRROR = 66,
+  DINING_TABLE = 67,
+  WINDOW = 68,
+  DESK = 69,
+  TOILET = 70,
+  DOOR = 71,
+  TV = 72,
+  LAPTOP = 73,
+  MOUSE = 74,
+  REMOTE = 75,
+  KEYBOARD = 76,
+  CELL_PHONE = 77,
+  MICROWAVE = 78,
+  OVEN = 79,
+  TOASTER = 80,
+  SINK = 81,
+  REFRIGERATOR = 82,
+  BLENDER = 83,
+  BOOK = 84,
+  CLOCK = 85,
+  VASE = 86,
+  SCISSORS = 87,
+  TEDDY_BEAR = 88,
+  HAIR_DRIER = 89,
+  TOOTHBRUSH = 90,
+  HAIR_BRUSH = 91,
+}
+```
+
+### Description
+
+The `CocoLabel` enum contains all 91 object classes from the COCO (Common Objects in Context) dataset. These labels are used by object detection models trained on COCO data.
+
+### Usage Example
+
+```typescript
+import { CocoLabel } from 'react-native-executorch';
+
+const detections = await objectDetection.forward(imageUri);
+
+detections.forEach((detection) => {
+  if (detection.label === 'PERSON') {
+    console.log(`Found person at confidence: ${detection.score}`);
+  }
+});
+```
+
+### Notes
+
+- Label IDs are 1-indexed (starting from 1, not 0)
+- The enum values match the official COCO dataset class IDs
+- Some IDs are skipped in the sequence (e.g., 40 is missing)
+- Used by models like `SSDLITE_320_MOBILENET_V3_LARGE` and `RF_DETR_NANO`
